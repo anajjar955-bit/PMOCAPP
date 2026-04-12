@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Dimensions, FlatList, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Dimensions, FlatList } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useAuth } from '../_layout';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -20,11 +20,17 @@ export default function LessonViewer() {
   const [audioLoading, setAudioLoading] = useState(false);
   const flatListRef = useRef<FlatList>(null);
   const soundRef = useRef<Audio.Sound | null>(null);
+  const autoPlayRef = useRef(true);
 
   useEffect(() => { fetchLesson(); return () => { stopAudio(); }; }, [id]);
 
-  // Stop audio when slide changes
-  useEffect(() => { stopAudio(); }, [currentSlide]);
+  // Auto-play audio when slide changes
+  useEffect(() => {
+    if (lesson && autoPlayRef.current) {
+      const timer = setTimeout(() => playSlideAudio(), 500);
+      return () => clearTimeout(timer);
+    }
+  }, [currentSlide, lesson]);
 
   const fetchLesson = async () => {
     try {
@@ -51,11 +57,10 @@ export default function LessonViewer() {
   };
 
   const playSlideAudio = async () => {
-    if (audioPlaying) {
+    if (audioPlaying || audioLoading) {
       await stopAudio();
       return;
     }
-
     setAudioLoading(true);
     try {
       await Audio.setAudioModeAsync({
@@ -63,7 +68,6 @@ export default function LessonViewer() {
         playsInSilentModeIOS: true,
         staysActiveInBackground: false,
       });
-
       const audioUrl = `${BACKEND_URL}/api/audio/slide/${id}/${currentSlide}`;
       const { sound } = await Audio.Sound.createAsync(
         { uri: audioUrl },
@@ -71,11 +75,15 @@ export default function LessonViewer() {
       );
       soundRef.current = sound;
       setAudioPlaying(true);
-
       sound.setOnPlaybackStatusUpdate((status) => {
         if (status.isLoaded && status.didJustFinish) {
           setAudioPlaying(false);
           soundRef.current = null;
+          // Auto-advance to next slide when audio finishes
+          if (lesson && currentSlide < lesson.slides.length - 1) {
+            autoPlayRef.current = true;
+            goToSlide(currentSlide + 1);
+          }
         }
       });
     } catch (e) {
@@ -94,6 +102,7 @@ export default function LessonViewer() {
   };
 
   const goToSlide = (index: number) => {
+    stopAudio();
     flatListRef.current?.scrollToIndex({ index, animated: true });
     setCurrentSlide(index);
   };
@@ -101,15 +110,20 @@ export default function LessonViewer() {
   const handleNext = () => {
     if (!lesson) return;
     if (currentSlide < lesson.slides.length - 1) {
+      autoPlayRef.current = true;
       goToSlide(currentSlide + 1);
     } else {
+      stopAudio();
       markComplete();
       router.push(`/quiz/${id}`);
     }
   };
 
   const handlePrev = () => {
-    if (currentSlide > 0) goToSlide(currentSlide - 1);
+    if (currentSlide > 0) {
+      autoPlayRef.current = true;
+      goToSlide(currentSlide - 1);
+    }
   };
 
   if (loading) return <View style={styles.loader}><ActivityIndicator size="large" color="#1D4ED8" /></View>;
@@ -129,9 +143,7 @@ export default function LessonViewer() {
           <Text style={styles.keyPointsTitle}>النقاط الرئيسية:</Text>
           {item.key_points.map((point: string, i: number) => (
             <View key={i} style={styles.keyPointRow}>
-              <View style={styles.bullet}>
-                <Text style={styles.bulletText}>{i + 1}</Text>
-              </View>
+              <View style={styles.bullet}><Text style={styles.bulletText}>{i + 1}</Text></View>
               <Text style={styles.keyPointText}>{point}</Text>
             </View>
           ))}
@@ -142,7 +154,6 @@ export default function LessonViewer() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Top Bar */}
       <View style={styles.topBar}>
         <TouchableOpacity testID="lesson-back-btn" onPress={() => { stopAudio(); router.back(); }} style={styles.topBtn}>
           <Ionicons name="arrow-forward" size={22} color="#0F172A" />
@@ -154,38 +165,28 @@ export default function LessonViewer() {
         <View style={{ width: 40 }} />
       </View>
 
-      {/* Audio Player Bar */}
       <View style={styles.audioBar}>
-        <TouchableOpacity
-          testID="play-audio-btn"
-          style={[styles.audioBtn, audioPlaying && styles.audioBtnActive]}
-          onPress={playSlideAudio}
-          disabled={audioLoading}
-        >
-          {audioLoading ? (
-            <ActivityIndicator size="small" color="#fff" />
-          ) : (
-            <Ionicons name={audioPlaying ? 'pause' : 'play'} size={20} color="#fff" />
-          )}
+        <TouchableOpacity testID="play-audio-btn" style={[styles.audioBtn, audioPlaying && styles.audioBtnActive]}
+          onPress={() => { autoPlayRef.current = false; playSlideAudio(); }} disabled={audioLoading}>
+          {audioLoading ? <ActivityIndicator size="small" color="#fff" /> :
+            <Ionicons name={audioPlaying ? 'pause' : 'play'} size={20} color="#fff" />}
         </TouchableOpacity>
         <View style={styles.audioInfo}>
           <Text style={styles.audioLabel}>
-            {audioLoading ? 'جاري تحميل الصوت...' : audioPlaying ? '🔊 يتم تشغيل الشرح الصوتي' : '🎧 اضغط لسماع شرح الشريحة'}
+            {audioLoading ? 'جاري تحميل الصوت...' : audioPlaying ? '🔊 الشرح الصوتي شغال' : '🎧 الصوت هيشتغل تلقائياً'}
           </Text>
-          <Text style={styles.audioSub}>صوت AI باللغة العربية</Text>
+          <Text style={styles.audioSub}>صوت عمر - لهجة مصرية</Text>
         </View>
       </View>
 
-      {/* Progress Dots */}
       <View style={styles.dots}>
         {slides.map((_: any, i: number) => (
-          <TouchableOpacity key={i} onPress={() => goToSlide(i)}>
+          <TouchableOpacity key={i} onPress={() => { autoPlayRef.current = true; goToSlide(i); }}>
             <View style={[styles.dot, i === currentSlide && styles.dotActive, i < currentSlide && styles.dotDone]} />
           </TouchableOpacity>
         ))}
       </View>
 
-      {/* Slides */}
       <FlatList
         ref={flatListRef}
         data={slides}
@@ -196,7 +197,10 @@ export default function LessonViewer() {
         keyExtractor={(_, i) => i.toString()}
         onMomentumScrollEnd={(e) => {
           const idx = Math.round(e.nativeEvent.contentOffset.x / (width - 32));
-          setCurrentSlide(idx);
+          if (idx !== currentSlide) {
+            autoPlayRef.current = true;
+            setCurrentSlide(idx);
+          }
         }}
         contentContainerStyle={{ paddingHorizontal: 16 }}
         snapToInterval={width - 32}
@@ -204,22 +208,15 @@ export default function LessonViewer() {
         getItemLayout={(_, index) => ({ length: width - 32, offset: (width - 32) * index, index })}
       />
 
-      {/* Navigation Buttons */}
       <View style={styles.navButtons}>
-        <TouchableOpacity
-          testID="prev-slide-btn"
+        <TouchableOpacity testID="prev-slide-btn"
           style={[styles.navBtn, styles.navBtnSecondary, currentSlide === 0 && styles.navBtnDisabled]}
-          onPress={handlePrev}
-          disabled={currentSlide === 0}
-        >
+          onPress={handlePrev} disabled={currentSlide === 0}>
           <Ionicons name="arrow-forward" size={18} color={currentSlide === 0 ? '#94A3B8' : '#1D4ED8'} />
           <Text style={[styles.navBtnSecondaryText, currentSlide === 0 && { color: '#94A3B8' }]}>السابق</Text>
         </TouchableOpacity>
-
         <TouchableOpacity testID="next-slide-btn" style={styles.navBtn} onPress={handleNext}>
-          <Text style={styles.navBtnText}>
-            {currentSlide === slides.length - 1 ? 'الاختبار القصير' : 'التالي'}
-          </Text>
+          <Text style={styles.navBtnText}>{currentSlide === slides.length - 1 ? 'الاختبار القصير' : 'التالي'}</Text>
           <Ionicons name={currentSlide === slides.length - 1 ? 'help-circle' : 'arrow-back'} size={18} color="#fff" />
         </TouchableOpacity>
       </View>
@@ -235,15 +232,8 @@ const styles = StyleSheet.create({
   topCenter: { flex: 1, alignItems: 'center' },
   topTitle: { fontSize: 16, fontWeight: '700', color: '#0F172A' },
   topSub: { fontSize: 12, color: '#64748B', marginTop: 2 },
-  audioBar: {
-    flexDirection: 'row-reverse', alignItems: 'center', gap: 12,
-    marginHorizontal: 16, padding: 12, borderRadius: 14,
-    backgroundColor: '#0F172A',
-  },
-  audioBtn: {
-    width: 44, height: 44, borderRadius: 22,
-    backgroundColor: '#1D4ED8', alignItems: 'center', justifyContent: 'center',
-  },
+  audioBar: { flexDirection: 'row-reverse', alignItems: 'center', gap: 12, marginHorizontal: 16, padding: 12, borderRadius: 14, backgroundColor: '#0F172A' },
+  audioBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#1D4ED8', alignItems: 'center', justifyContent: 'center' },
   audioBtnActive: { backgroundColor: '#EA580C' },
   audioInfo: { flex: 1 },
   audioLabel: { fontSize: 14, fontWeight: '600', color: '#fff', textAlign: 'right' },

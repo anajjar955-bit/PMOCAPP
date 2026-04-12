@@ -240,6 +240,34 @@ async def complete_lesson(lesson_id: str, request: Request):
     )
     return {"success": True}
 
+@api_router.get("/course/lessons/{lesson_id}/next")
+async def get_next_lesson(lesson_id: str, request: Request):
+    """Get the next lesson after the current one"""
+    user = await get_optional_user(request)
+    is_paid = user.get("is_paid", False) if user else False
+    current = await db.lessons.find_one({"id": lesson_id}, {"_id": 0, "module_id": 1, "order": 1})
+    if not current:
+        return {"next_lesson": None}
+    next_in_module = await db.lessons.find_one(
+        {"module_id": current["module_id"], "order": current["order"] + 1},
+        {"_id": 0, "id": 1, "title": 1, "is_demo": 1, "module_id": 1}
+    )
+    if next_in_module:
+        next_in_module["is_accessible"] = next_in_module.get("is_demo", False) or is_paid
+        return {"next_lesson": next_in_module}
+    current_mod = await db.modules.find_one({"id": current["module_id"]}, {"_id": 0, "order": 1})
+    if current_mod:
+        next_mod = await db.modules.find_one({"order": current_mod["order"] + 1}, {"_id": 0, "id": 1})
+        if next_mod:
+            first_lesson = await db.lessons.find_one(
+                {"module_id": next_mod["id"], "order": 1},
+                {"_id": 0, "id": 1, "title": 1, "is_demo": 1, "module_id": 1}
+            )
+            if first_lesson:
+                first_lesson["is_accessible"] = first_lesson.get("is_demo", False) or is_paid
+                return {"next_lesson": first_lesson}
+    return {"next_lesson": None}
+
 # ========== Exam Routes ==========
 @api_router.get("/exams")
 async def get_exams(request: Request):
@@ -379,7 +407,8 @@ async def get_slide_audio(lesson_id: str, slide_index: int, request: Request):
 - اختم بخلاصة سريعة
 - استخدم كلمات مصرية: دلوقتي، كده، عشان، يعني، بتاع، حاجة، إزاي، ليه
 - اكتب كلام متصل بدون عناوين أو نقاط
-- خلي الكلام طبيعي زي حد بيتكلم مش بيقرأ"""
+- خلي الكلام طبيعي زي حد بيتكلم مش بيقرأ
+- مهم جداً: ضع تشكيل كامل على كل الكلمات العربية (فتحة، ضمة، كسرة، سكون، شدة، تنوين) عشان القراءة تكون مظبوطة 100%"""
 
         narration = await chat.send_message(UserMessage(text=prompt))
         narration = narration.strip()[:4096]

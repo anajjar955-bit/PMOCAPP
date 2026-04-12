@@ -17,8 +17,21 @@ export default function Quiz() {
   const [results, setResults] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [nextLesson, setNextLesson] = useState<any>(null);
 
-  useEffect(() => { fetchQuiz(); }, [lessonId]);
+  useEffect(() => { fetchQuiz(); fetchNextLesson(); }, [lessonId]);
+
+  const fetchNextLesson = async () => {
+    try {
+      const headers: any = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const res = await fetch(`${BACKEND_URL}/api/course/lessons/${lessonId}/next`, { headers });
+      if (res.ok) {
+        const data = await res.json();
+        setNextLesson(data.next_lesson);
+      }
+    } catch (e) { console.log(e); }
+  };
 
   const fetchQuiz = async () => {
     try {
@@ -106,8 +119,17 @@ export default function Quiz() {
             );
           })}
 
-          <TouchableOpacity testID="quiz-done-btn" style={styles.doneBtn} onPress={() => router.back()}>
-            <Text style={styles.doneBtnText}>العودة للدورة</Text>
+          <TouchableOpacity testID="quiz-done-btn" style={styles.doneBtn} onPress={() => {
+            if (nextLesson && nextLesson.is_accessible) {
+              router.replace(`/lesson/${nextLesson.id}`);
+            } else {
+              router.back();
+            }
+          }}>
+            <Text style={styles.doneBtnText}>
+              {nextLesson && nextLesson.is_accessible ? `الدرس التالي: ${nextLesson.title}` : 'العودة للدورة'}
+            </Text>
+            {nextLesson && nextLesson.is_accessible && <Ionicons name="arrow-back" size={18} color="#fff" />}
           </TouchableOpacity>
           <View style={{ height: 32 }} />
         </ScrollView>
