@@ -476,6 +476,11 @@ async def get_slide_audio(lesson_id: str, slide_index: int, request: Request):
         narration = re.sub(r'أو{2,}ه?', '', narration)
         narration = re.sub(r'م{3,}', '', narration)
         narration = re.sub(r'\s{2,}', ' ', narration).strip()
+        # Clean stuttering: remove repeated words/phrases
+        narration = re.sub(r'\b(\w+)\s+\1\b', r'\1', narration)  # Remove duplicate consecutive words
+        narration = re.sub(r'(ال)\s+(ال)', r'ال', narration)  # Fix "ال ال" stuttering
+        narration = re.sub(r'(.)\1{2,}', r'\1\1', narration)  # Max 2 consecutive same chars
+        narration = re.sub(r'\s{2,}', ' ', narration).strip()
         logger.info(f"Narration for {cache_key}: {narration[:80]}...")
     except Exception as e:
         logger.error(f"GPT narration failed: {e}")

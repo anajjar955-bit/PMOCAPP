@@ -21,8 +21,8 @@ export default function LessonViewer() {
   const currentSlideRef = useRef(0);
   const [currentSlide, setCurrentSlideState] = useState(0);
   const isMountedRef = useRef(true);
-  const [subtitleText, setSubtitleText] = useState('');
-  const [showSubtitle, setShowSubtitle] = useState(true);
+  const [playbackSpeed, setPlaybackSpeed] = useState(1.0);
+  const SPEED_OPTIONS = [1.0, 1.25, 1.5, 2.0];
 
   const setCurrentSlide = (val: number) => {
     currentSlideRef.current = val;
@@ -95,7 +95,7 @@ export default function LessonViewer() {
         : `${BACKEND_URL}/api/audio/slide/${id}/${slideIndex}`;
       const { sound } = await Audio.Sound.createAsync(
         { uri: audioUrl },
-        { shouldPlay: true }
+        { shouldPlay: true, rate: playbackSpeed, shouldCorrectPitch: true }
       );
       if (!isMountedRef.current) { await sound.unloadAsync(); return; }
       soundRef.current = sound;
@@ -125,6 +125,15 @@ export default function LessonViewer() {
       await cleanupAudio();
     } else {
       await startAudio(currentSlideRef.current);
+    }
+  };
+
+  const cycleSpeed = async () => {
+    const idx = SPEED_OPTIONS.indexOf(playbackSpeed);
+    const nextSpeed = SPEED_OPTIONS[(idx + 1) % SPEED_OPTIONS.length];
+    setPlaybackSpeed(nextSpeed);
+    if (soundRef.current) {
+      try { await soundRef.current.setRateAsync(nextSpeed, true); } catch (e) {}
     }
   };
 
@@ -216,10 +225,10 @@ export default function LessonViewer() {
                 ? t('الصوت شغال', 'Playing')
                 : t('اضغط لتشغيل الصوت أو سيعمل تلقائياً', 'Tap to play or auto-plays')}
           </Text>
-          <Text style={[styles.audioSub, { textAlign }]}>
-            {lang === 'en' ? 'Professional Narrator' : 'راوي محترف'}
-          </Text>
         </View>
+        <TouchableOpacity style={styles.speedBtn} onPress={cycleSpeed}>
+          <Text style={styles.speedBtnText}>{playbackSpeed}x</Text>
+        </TouchableOpacity>
       </View>
 
       <View style={[styles.dots, { flexDirection: rowDir }]}>
@@ -292,18 +301,12 @@ const styles = StyleSheet.create({
   audioBtnActive: { backgroundColor: '#EA6A0B' },
   audioInfo: { flex: 1 },
   audioLabel: { fontSize: 13, fontWeight: '600', color: '#fff' },
-  audioSub: { fontSize: 11, color: 'rgba(255,255,255,0.6)', marginTop: 2 },
+  speedBtn: { backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 14 },
+  speedBtnText: { fontSize: 13, fontWeight: '700', color: '#fff' },
   dots: { justifyContent: 'center', gap: 8, paddingVertical: 8 },
   dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#D0D0CC' },
   dotActive: { backgroundColor: '#1B365D', width: 24 },
   dotDone: { backgroundColor: '#D4A843' },
-  // Subtitle bar
-  subtitleBar: { marginHorizontal: 16, marginBottom: 4, backgroundColor: 'rgba(27,54,93,0.9)', borderRadius: 8, padding: 10, maxHeight: 80, flexDirection: 'row' },
-  subtitleScroll: { flex: 1 },
-  subtitleText: { fontSize: 13, color: '#fff', lineHeight: 20 },
-  subtitleClose: { paddingLeft: 8, justifyContent: 'flex-start' },
-  subtitleToggle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, marginHorizontal: 16, marginBottom: 4, paddingVertical: 4 },
-  subtitleToggleText: { fontSize: 11, color: '#1B365D', fontWeight: '600' },
   slide: { backgroundColor: '#fff', borderRadius: 4, overflow: 'hidden', borderWidth: 1, borderColor: '#E0E0DC' },
   slideBody: { paddingBottom: 8 },
   slideTopBar: { backgroundColor: '#1B365D', paddingHorizontal: 16, paddingVertical: 10, justifyContent: 'space-between', alignItems: 'center' },
