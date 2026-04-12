@@ -418,7 +418,7 @@ async def get_progress(request: Request):
 @api_router.get("/audio/slide/{lesson_id}/{slide_index}")
 async def get_slide_audio(lesson_id: str, slide_index: int, request: Request):
     """Generate TTS audio with ElevenLabs Egyptian Arabic voice"""
-    cache_key = f"{lesson_id}_{slide_index}_akv6"
+    cache_key = f"{lesson_id}_{slide_index}_akv7"
     cached = await db.audio_cache.find_one({"cache_key": cache_key}, {"_id": 0})
     if cached and cached.get("audio_base64"):
         audio_bytes = base64.b64decode(cached["audio_base64"])
@@ -476,6 +476,9 @@ async def get_slide_audio(lesson_id: str, slide_index: int, request: Request):
         narration = re.sub(r'أو{2,}ه?', '', narration)
         narration = re.sub(r'م{3,}', '', narration)
         narration = re.sub(r'\s{2,}', ' ', narration).strip()
+        # Fix taa marbuta: replace ة with ت when followed by a word (not end of sentence)
+        # This makes TTS pronounce it as "t" instead of "h"
+        narration = re.sub(r'ة(\s+)(\w)', r'ت\1\2', narration)
         logger.info(f"Narration for {cache_key}: {narration[:80]}...")
     except Exception as e:
         logger.error(f"GPT narration failed: {e}")
@@ -524,7 +527,7 @@ async def get_slide_subtitle(lesson_id: str, slide_index: int, lang: str = "ar")
     if lang == "en":
         cache_key = f"{lesson_id}_{slide_index}_en"
     else:
-        cache_key = f"{lesson_id}_{slide_index}_akv6"
+        cache_key = f"{lesson_id}_{slide_index}_akv7"
     cached = await db.audio_cache.find_one({"cache_key": cache_key}, {"_id": 0, "narration_text": 1})
     if cached and cached.get("narration_text"):
         return {"text": cached["narration_text"]}

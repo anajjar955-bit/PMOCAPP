@@ -230,25 +230,6 @@ export default function LessonViewer() {
         ))}
       </View>
 
-      {/* Subtitle Bar */}
-      {showSubtitle && subtitleText ? (
-        <View style={styles.subtitleBar}>
-          <ScrollView style={styles.subtitleScroll} nestedScrollEnabled showsVerticalScrollIndicator={false}>
-            <Text style={[styles.subtitleText, { textAlign, writingDirection: isRTL ? 'rtl' : 'ltr' }]}>
-              {subtitleText}
-            </Text>
-          </ScrollView>
-          <TouchableOpacity style={styles.subtitleClose} onPress={() => setShowSubtitle(false)}>
-            <Ionicons name="close-circle" size={18} color="rgba(255,255,255,0.6)" />
-          </TouchableOpacity>
-        </View>
-      ) : !showSubtitle ? (
-        <TouchableOpacity style={styles.subtitleToggle} onPress={() => setShowSubtitle(true)}>
-          <Ionicons name="chatbox-ellipses-outline" size={16} color="#1B365D" />
-          <Text style={styles.subtitleToggleText}>{t('إظهار النص', 'Show Script')}</Text>
-        </TouchableOpacity>
-      ) : null}
-
       <ScrollView style={{ flex: 1, marginHorizontal: 16 }} showsVerticalScrollIndicator={false}>
         <View style={styles.slide}>
           <View style={[styles.slideTopBar, { flexDirection: rowDir }]}>
