@@ -418,7 +418,7 @@ async def get_progress(request: Request):
 @api_router.get("/audio/slide/{lesson_id}/{slide_index}")
 async def get_slide_audio(lesson_id: str, slide_index: int, request: Request):
     """Generate TTS audio with ElevenLabs Egyptian Arabic voice"""
-    cache_key = f"{lesson_id}_{slide_index}_akram_eg"
+    cache_key = f"{lesson_id}_{slide_index}_akv2"
     cached = await db.audio_cache.find_one({"cache_key": cache_key}, {"_id": 0})
     if cached and cached.get("audio_base64"):
         audio_bytes = base64.b64decode(cached["audio_base64"])
@@ -438,7 +438,7 @@ async def get_slide_audio(lesson_id: str, slide_index: int, request: Request):
     if key_points:
         slide_content += "نقاط: " + " / ".join(key_points)
 
-    # Step 1: Generate Egyptian Arabic narration with FULL tashkeel using GPT
+    # Step 1: Generate clear Arabic narration with precise tashkeel using GPT
     try:
         from emergentintegrations.llm.openai import LlmChat, UserMessage
         import hashlib
@@ -446,21 +446,21 @@ async def get_slide_audio(lesson_id: str, slide_index: int, request: Request):
         chat = LlmChat(
             api_key=os.getenv("EMERGENT_LLM_KEY"),
             session_id=sid,
-            system_message="أَنْتَ مُدَرِّبٌ مِصْرِيٌّ مُتَخَصِّصٌ فِي إِدارَةِ المَشارِيعِ. بِتِشْرَحْ بِالعامِّيَّةِ المِصْرِيَّةِ الطَّبيعِيَّةِ. يَجِبُ أَنْ يَكُونَ كُلُّ حَرْفٍ مُشَكَّلاً تَشْكِيلاً كامِلاً."
+            system_message="أنت محاضر محترف في إدارة المشاريع. تشرح بالعربية الفصحى البسيطة الواضحة. كل كلمة يجب أن تكون مشكّلة تشكيلاً كاملاً ودقيقاً."
         )
         chat = chat.with_model("openai", "gpt-4o-mini")
-        prompt = f"""اشْرَحْ المُحْتَوَى دَهْ كَأَنَّكَ مُدَرِّبٌ مِصْرِيٌّ بِتِشْرَحْ فِي فِيدْيُو:
+        prompt = f"""اكتب نصاً صوتياً لشرح هذا المحتوى كمحاضر محترف:
 
 {slide_content}
 
-اكْتُبْ شَرْحٌ بِالعامِّيَّةِ المِصْرِيَّةِ الطَّبيعِيَّةِ فِي حُدُودِ 100-130 كِلْمَة.
-- اِبْدَأْ بِمُقَدِّمَةٍ حَماسِيَّةٍ قَصِيرَةٍ
-- اِشْرَحْ بِهُدُوءٍ مَعَ أَمْثِلَةٍ مِنَ الواقِعِ
-- اخْتِمْ بِخُلاصَةٍ سَرِيعَةٍ
-- اسْتَخْدِمْ كَلِماتٍ مِصْرِيَّةٍ: دَلْوَقْتِي، كِدَهْ، عَشانْ، يَعْنِي، بِتاعْ، حاجَة، إِزّايْ، لِيهْ
-- اكْتُبْ كَلامٌ مُتَّصِلٌ بِدُونِ عَناوِينَ أَوْ نِقاطٍ
-- خَلِّي الكَلامَ طَبيعِيٌّ زَيِّ حَدٍّ بِيِتْكَلِّمْ مِشْ بِيِقْرَأْ
-- مُهِمٌّ جِدّاً جِدّاً: ضَعْ تَشْكِيلاً كامِلاً عَلَى كُلِّ حَرْفٍ عَرَبِيٍّ (فَتْحَة، ضَمَّة، كَسْرَة، سُكُون، شَدَّة، تَنْوِين) بِدُونِ اسْتِثْناءٍ عَشانْ القِراءَةُ تِكُونْ مَظْبُوطَةٌ 100%"""
+القواعد الصارمة:
+1. اكتب بالعربية الفصحى البسيطة فقط - لا تستخدم أي كلمات عامية إطلاقاً
+2. ضع تشكيلاً كاملاً ودقيقاً على كل كلمة (فتحة ضمة كسرة سكون شدة تنوين)
+3. استخدم جملاً قصيرة وواضحة
+4. الطول: 80 إلى 120 كلمة
+5. ابدأ بمقدمة مباشرة ثم اشرح ثم اختم بخلاصة
+6. اكتب نصاً متصلاً بدون عناوين أو نقاط أو ترقيم
+7. لا تبدأ بـ بسم الله أو أي مقدمة دينية"""
 
         narration = await chat.send_message(UserMessage(text=prompt))
         narration = narration.strip()[:4096]
