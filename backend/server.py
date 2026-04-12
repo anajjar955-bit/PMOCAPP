@@ -418,7 +418,7 @@ async def get_progress(request: Request):
 @api_router.get("/audio/slide/{lesson_id}/{slide_index}")
 async def get_slide_audio(lesson_id: str, slide_index: int, request: Request):
     """Generate TTS audio with ElevenLabs Egyptian Arabic voice"""
-    cache_key = f"{lesson_id}_{slide_index}_akram"
+    cache_key = f"{lesson_id}_{slide_index}_akram_eg"
     cached = await db.audio_cache.find_one({"cache_key": cache_key}, {"_id": 0})
     if cached and cached.get("audio_base64"):
         audio_bytes = base64.b64decode(cached["audio_base64"])
@@ -438,29 +438,29 @@ async def get_slide_audio(lesson_id: str, slide_index: int, request: Request):
     if key_points:
         slide_content += "نقاط: " + " / ".join(key_points)
 
-    # Step 1: Generate Arabic narration with FULL tashkeel using GPT
+    # Step 1: Generate Egyptian Arabic narration with FULL tashkeel using GPT
     try:
         from emergentintegrations.llm.openai import LlmChat, UserMessage
         import hashlib
-        sid = f"ht_{hashlib.md5(cache_key.encode()).hexdigest()[:8]}"
+        sid = f"ak_{hashlib.md5(cache_key.encode()).hexdigest()[:8]}"
         chat = LlmChat(
             api_key=os.getenv("EMERGENT_LLM_KEY"),
             session_id=sid,
-            system_message="أنتَ مُحاضِرٌ مُتَخَصِّصٌ فِي إِدارَةِ المَشارِيعِ. تَشْرَحُ بِالعَرَبِيَّةِ الفُصْحَى المُبَسَّطَةِ بِأُسْلُوبٍ مِهْنِيٍّ وَاضِحٍ. يَجِبُ أَنْ يَكُونَ كُلُّ حَرْفٍ مُشَكَّلاً تَشْكِيلاً كامِلاً."
+            system_message="أَنْتَ مُدَرِّبٌ مِصْرِيٌّ مُتَخَصِّصٌ فِي إِدارَةِ المَشارِيعِ. بِتِشْرَحْ بِالعامِّيَّةِ المِصْرِيَّةِ الطَّبيعِيَّةِ. يَجِبُ أَنْ يَكُونَ كُلُّ حَرْفٍ مُشَكَّلاً تَشْكِيلاً كامِلاً."
         )
         chat = chat.with_model("openai", "gpt-4o-mini")
-        prompt = f"""اشْرَحْ هَذا المُحْتَوَى كَمُحاضِرٍ مِهْنِيٍّ فِي دَوْرَةٍ تَدْرِيبِيَّةٍ:
+        prompt = f"""اشْرَحْ المُحْتَوَى دَهْ كَأَنَّكَ مُدَرِّبٌ مِصْرِيٌّ بِتِشْرَحْ فِي فِيدْيُو:
 
 {slide_content}
 
-المَطْلُوب:
-- اكْتُبْ شَرْحاً بِالعَرَبِيَّةِ الفُصْحَى المُبَسَّطَةِ فِي حُدُودِ 100-130 كَلِمَة
-- ابْدَأْ بِمُقَدِّمَةٍ قَصِيرَةٍ
-- اشْرَحْ بِوُضُوحٍ مَعَ أَمْثِلَةٍ عَمَلِيَّةٍ
+اكْتُبْ شَرْحٌ بِالعامِّيَّةِ المِصْرِيَّةِ الطَّبيعِيَّةِ فِي حُدُودِ 100-130 كِلْمَة.
+- اِبْدَأْ بِمُقَدِّمَةٍ حَماسِيَّةٍ قَصِيرَةٍ
+- اِشْرَحْ بِهُدُوءٍ مَعَ أَمْثِلَةٍ مِنَ الواقِعِ
 - اخْتِمْ بِخُلاصَةٍ سَرِيعَةٍ
-- اكْتُبْ كَلاماً مُتَّصِلاً بِدُونِ عَناوِينَ أَوْ نِقاطٍ
-- مُهِمٌّ جِدّاً جِدّاً: ضَعْ تَشْكِيلاً كامِلاً عَلَى كُلِّ حَرْفٍ عَرَبِيٍّ (فَتْحَة، ضَمَّة، كَسْرَة، سُكُون، شَدَّة، تَنْوِين) بِدُونِ اسْتِثْناء
-- كُلُّ كَلِمَةٍ يَجِبُ أَنْ تَكُونَ مُشَكَّلَةً تَشْكِيلاً كامِلاً مِثْلَ القُرْآنِ الكَرِيمِ"""
+- اسْتَخْدِمْ كَلِماتٍ مِصْرِيَّةٍ: دَلْوَقْتِي، كِدَهْ، عَشانْ، يَعْنِي، بِتاعْ، حاجَة، إِزّايْ، لِيهْ
+- اكْتُبْ كَلامٌ مُتَّصِلٌ بِدُونِ عَناوِينَ أَوْ نِقاطٍ
+- خَلِّي الكَلامَ طَبيعِيٌّ زَيِّ حَدٍّ بِيِتْكَلِّمْ مِشْ بِيِقْرَأْ
+- مُهِمٌّ جِدّاً جِدّاً: ضَعْ تَشْكِيلاً كامِلاً عَلَى كُلِّ حَرْفٍ عَرَبِيٍّ (فَتْحَة، ضَمَّة، كَسْرَة، سُكُون، شَدَّة، تَنْوِين) بِدُونِ اسْتِثْناءٍ عَشانْ القِراءَةُ تِكُونْ مَظْبُوطَةٌ 100%"""
 
         narration = await chat.send_message(UserMessage(text=prompt))
         narration = narration.strip()[:4096]
