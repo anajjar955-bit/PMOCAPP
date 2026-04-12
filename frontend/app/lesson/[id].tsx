@@ -99,8 +99,13 @@ export default function LessonViewer() {
           soundRef.current = null;
           const currentIdx = currentSlideRef.current;
           if (lesson && currentIdx < (lesson.slides?.length || 0) - 1) {
+            // Auto-advance to next slide
             const nextIdx = currentIdx + 1;
             goToSlideAndPlay(nextIdx);
+          } else if (lesson) {
+            // Last slide finished - auto-advance to next lesson
+            markComplete();
+            autoAdvanceToNextLesson();
           }
         }
       });
@@ -139,6 +144,22 @@ export default function LessonViewer() {
         method: 'POST', headers: { 'Authorization': `Bearer ${token}` }
       });
     } catch (e) {}
+  };
+
+  const autoAdvanceToNextLesson = async () => {
+    try {
+      const headers: any = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const res = await fetch(`${BACKEND_URL}/api/course/lessons/${id}/next`, { headers });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.next_lesson && data.next_lesson.is_accessible) {
+          setTimeout(() => {
+            if (isMountedRef.current) router.replace(`/lesson/${data.next_lesson.id}`);
+          }, 1500);
+        }
+      }
+    } catch (e) { console.log('Auto-advance failed:', e); }
   };
 
   const handleNext = () => {
