@@ -20,6 +20,7 @@ ecdsa==0.19.2
 edge-tts==7.2.8
 elevenlabs==2.42.0
 email-validator==2.3.0
+emergentintegrations==0.1.1
 et_xmlfile==2.0.0
 fastapi==0.110.1
 fastuuid==0.14.0
