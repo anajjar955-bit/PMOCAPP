@@ -213,6 +213,11 @@ export default function LessonViewer() {
   const slideContent = lang === 'en' ? (currentItem?.content_en || currentItem?.content) : currentItem?.content;
   const keyPoints = lang === 'en' ? (currentItem?.key_points_en || currentItem?.key_points || []) : (currentItem?.key_points || []);
 
+  // Arabic translation for English mode subtitle
+  const arTitle = currentItem?.title || '';
+  const arContent = currentItem?.content || '';
+  const arKeyPoints = currentItem?.key_points || [];
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={[styles.topBar, { flexDirection: rowDir }]}>
@@ -253,6 +258,16 @@ export default function LessonViewer() {
           <View style={[styles.audioProgressFill, { width: `${audioProgress * 100}%` }]} />
         </View>
       </View>
+
+      {/* Arabic Translation Subtitle - only in English mode */}
+      {lang === 'en' && (audioPlaying || audioLoading) && (
+        <View style={styles.arSubtitleBar}>
+          <ScrollView style={styles.arSubtitleScroll} nestedScrollEnabled showsVerticalScrollIndicator={false}>
+            <Text style={styles.arSubtitleTitle}>{arTitle}</Text>
+            <Text style={styles.arSubtitleText}>{arContent}</Text>
+          </ScrollView>
+        </View>
+      )}
 
       <View style={[styles.dots, { flexDirection: rowDir }]}>
         {slides.map((_: any, i: number) => (
@@ -329,6 +344,10 @@ const styles = StyleSheet.create({
   speedBtnText: { fontSize: 13, fontWeight: '700', color: '#fff' },
   audioProgressBg: { height: 3, backgroundColor: 'rgba(255,255,255,0.2)' },
   audioProgressFill: { height: 3, backgroundColor: '#D4A843' },
+  arSubtitleBar: { marginHorizontal: 16, marginTop: 4, backgroundColor: 'rgba(27,54,93,0.08)', borderRadius: 8, padding: 10, maxHeight: 70, borderWidth: 1, borderColor: 'rgba(27,54,93,0.15)' },
+  arSubtitleScroll: { flex: 1 },
+  arSubtitleTitle: { fontSize: 13, fontWeight: '700', color: '#1B365D', textAlign: 'right', marginBottom: 4, writingDirection: 'rtl' },
+  arSubtitleText: { fontSize: 12, color: '#475569', textAlign: 'right', lineHeight: 20, writingDirection: 'rtl' },
   dots: { justifyContent: 'center', gap: 8, paddingVertical: 8 },
   dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#D0D0CC' },
   dotActive: { backgroundColor: '#1B365D', width: 24 },
