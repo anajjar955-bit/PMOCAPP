@@ -418,7 +418,7 @@ async def get_progress(request: Request):
 @api_router.get("/audio/slide/{lesson_id}/{slide_index}")
 async def get_slide_audio(lesson_id: str, slide_index: int, request: Request):
     """Generate TTS audio with ElevenLabs Egyptian Arabic voice"""
-    cache_key = f"{lesson_id}_{slide_index}_haitham"
+    cache_key = f"{lesson_id}_{slide_index}_akram"
     cached = await db.audio_cache.find_one({"cache_key": cache_key}, {"_id": 0})
     if cached and cached.get("audio_base64"):
         audio_bytes = base64.b64decode(cached["audio_base64"])
@@ -474,7 +474,7 @@ async def get_slide_audio(lesson_id: str, slide_index: int, request: Request):
         from elevenlabs import ElevenLabs as ElevenLabsClient
         from elevenlabs.types import VoiceSettings
         el_client = ElevenLabsClient(api_key=os.getenv("ELEVENLABS_API_KEY"))
-        voice_id = os.getenv("ELEVENLABS_VOICE_ID", "UR972wNGq3zluze0LoIp")
+        voice_id = os.getenv("ELEVENLABS_VOICE_ID", "AyP8w7adt2oPlQnbPqzQ")
 
         audio_gen = el_client.text_to_speech.convert(
             text=narration,
