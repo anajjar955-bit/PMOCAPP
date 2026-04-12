@@ -515,6 +515,92 @@ async def list_codes(request: Request):
     codes = await db.activation_codes.find({}, {"_id": 0}).sort("created_at", -1).to_list(100)
     return {"codes": codes}
 
+@api_router.get("/admin/users")
+async def list_users(request: Request):
+    """Admin lists all users with progress"""
+    user = await get_current_user(request)
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    total_lessons = await db.lessons.count_documents({})
+    users_cursor = db.users.find({}, {"_id": 0, "password_hash": 0}).sort("created_at", -1)
+    users = await users_cursor.to_list(500)
+    result = []
+    for u in users:
+        completed = len(u.get("progress", {}).get("completed_lessons", []))
+        quiz_scores = u.get("progress", {}).get("quiz_scores", {})
+        avg_quiz = round(sum(quiz_scores.values()) / len(quiz_scores)) if quiz_scores else 0
+        exam_attempts = u.get("progress", {}).get("exam_attempts", [])
+        best_exam = max([a.get("score", 0) for a in exam_attempts], default=0) if exam_attempts else 0
+        result.append({
+            "name": u.get("name", ""),
+            "email": u.get("email", ""),
+            "role": u.get("role", "user"),
+            "is_paid": u.get("is_paid", False),
+            "created_at": u.get("created_at", ""),
+            "completed_lessons": completed,
+            "total_lessons": total_lessons,
+            "progress_pct": round((completed / total_lessons) * 100) if total_lessons > 0 else 0,
+            "avg_quiz_score": avg_quiz,
+            "exam_attempts_count": len(exam_attempts),
+            "best_exam_score": best_exam,
+            "activation_code": u.get("activation_code", ""),
+        })
+    return {"users": result, "total": len(result)}
+
+@api_router.get("/admin/export-users")
+async def export_users_excel(request: Request):
+    """Admin exports users data to Excel"""
+    user = await get_current_user(request)
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    import io
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, Alignment, PatternFill
+    total_lessons = await db.lessons.count_documents({})
+    users = await db.users.find({}, {"_id": 0, "password_hash": 0}).sort("created_at", -1).to_list(500)
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Users"
+    ws.sheet_view.rightToLeft = True
+    headers = ["الاسم", "البريد الإلكتروني", "الحالة", "مشترك", "تاريخ التسجيل",
+               "الدروس المكتملة", "نسبة التقدم", "متوسط الاختبارات القصيرة",
+               "عدد محاولات الامتحان", "أعلى درجة امتحان", "كود التفعيل"]
+    header_fill = PatternFill(start_color="1D4ED8", end_color="1D4ED8", fill_type="solid")
+    header_font = Font(color="FFFFFF", bold=True, size=12)
+    for col, h in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col, value=h)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal="center")
+    for row_idx, u in enumerate(users, 2):
+        completed = len(u.get("progress", {}).get("completed_lessons", []))
+        quiz_scores = u.get("progress", {}).get("quiz_scores", {})
+        avg_quiz = round(sum(quiz_scores.values()) / len(quiz_scores)) if quiz_scores else 0
+        exam_attempts = u.get("progress", {}).get("exam_attempts", [])
+        best_exam = max([a.get("score", 0) for a in exam_attempts], default=0) if exam_attempts else 0
+        pct = round((completed / total_lessons) * 100) if total_lessons > 0 else 0
+        ws.cell(row=row_idx, column=1, value=u.get("name", ""))
+        ws.cell(row=row_idx, column=2, value=u.get("email", ""))
+        ws.cell(row=row_idx, column=3, value=u.get("role", "user"))
+        ws.cell(row=row_idx, column=4, value="نعم" if u.get("is_paid") else "لا")
+        ws.cell(row=row_idx, column=5, value=str(u.get("created_at", ""))[:10])
+        ws.cell(row=row_idx, column=6, value=f"{completed}/{total_lessons}")
+        ws.cell(row=row_idx, column=7, value=f"{pct}%")
+        ws.cell(row=row_idx, column=8, value=f"{avg_quiz}%")
+        ws.cell(row=row_idx, column=9, value=len(exam_attempts))
+        ws.cell(row=row_idx, column=10, value=f"{best_exam}%")
+        ws.cell(row=row_idx, column=11, value=u.get("activation_code", ""))
+    for col in ws.columns:
+        ws.column_dimensions[col[0].column_letter].width = 18
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return Response(
+        content=output.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=pmhouse_users.xlsx"}
+    )
+
 # ========== Payment Routes ==========
 WHATSAPP_NUMBER = "201005394312"
 
