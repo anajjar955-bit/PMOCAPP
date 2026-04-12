@@ -69,15 +69,34 @@ export default function Quiz() {
 
   if (loading) return <View style={styles.loader}><ActivityIndicator size="large" color="#1D4ED8" /></View>;
 
+  const goBack = () => {
+    if (router.canGoBack()) router.back();
+    else router.replace('/(tabs)/course');
+  };
+
+  const goToNextLesson = () => {
+    if (nextLesson && nextLesson.is_accessible) {
+      router.replace(`/lesson/${nextLesson.id}`);
+    } else {
+      goBack();
+    }
+  };
+
   if (questions.length === 0) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.emptyContainer}>
           <Ionicons name="checkmark-circle" size={48} color="#16A34A" />
           <Text style={styles.emptyText}>لا توجد أسئلة لهذا الدرس</Text>
-          <TouchableOpacity testID="quiz-back" style={styles.doneBtn} onPress={() => router.back()}>
-            <Text style={styles.doneBtnText}>العودة</Text>
-          </TouchableOpacity>
+          {nextLesson && nextLesson.is_accessible ? (
+            <TouchableOpacity testID="quiz-next-lesson" style={styles.doneBtn} onPress={goToNextLesson}>
+              <Text style={styles.doneBtnText}>الدرس التالي: {nextLesson.title}</Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity testID="quiz-back" style={styles.doneBtn} onPress={goBack}>
+              <Text style={styles.doneBtnText}>العودة للدورة</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </SafeAreaView>
     );
@@ -119,13 +138,7 @@ export default function Quiz() {
             );
           })}
 
-          <TouchableOpacity testID="quiz-done-btn" style={styles.doneBtn} onPress={() => {
-            if (nextLesson && nextLesson.is_accessible) {
-              router.replace(`/lesson/${nextLesson.id}`);
-            } else {
-              router.back();
-            }
-          }}>
+          <TouchableOpacity testID="quiz-done-btn" style={styles.doneBtn} onPress={goToNextLesson}>
             <Text style={styles.doneBtnText}>
               {nextLesson && nextLesson.is_accessible ? `الدرس التالي: ${nextLesson.title}` : 'العودة للدورة'}
             </Text>
@@ -143,8 +156,8 @@ export default function Quiz() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.topBar}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.topBtn}>
-          <Ionicons name="close" size={24} color="#0F172A" />
+        <TouchableOpacity onPress={goBack} style={styles.topBtn}>
+          <Ionicons name="arrow-forward" size={24} color="#0F172A" />
         </TouchableOpacity>
         <Text style={styles.topTitle}>اختبار قصير</Text>
         <Text style={styles.topCounter}>{currentQ + 1}/{questions.length}</Text>

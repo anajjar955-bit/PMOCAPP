@@ -70,7 +70,10 @@ export default function Payment() {
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-          <TouchableOpacity testID="payment-back-btn" onPress={() => router.back()} style={styles.backBtn}>
+          <TouchableOpacity testID="payment-back-btn" onPress={() => {
+            if (router.canGoBack()) router.back();
+            else router.replace('/(tabs)/home');
+          }} style={styles.backBtn}>
             <Ionicons name="arrow-forward" size={24} color="#0F172A" />
           </TouchableOpacity>
 

@@ -151,14 +151,17 @@ export default function Certificate() {
   if (error) {
     return (
       <SafeAreaView style={styles.container}>
-        <TouchableOpacity testID="cert-back-btn" onPress={() => router.back()} style={styles.backBtn}>
+        <TouchableOpacity testID="cert-back-btn" onPress={() => {
+          if (router.canGoBack()) router.back();
+          else router.replace('/(tabs)/home');
+        }} style={styles.backBtn}>
           <Ionicons name="arrow-forward" size={24} color="#0F172A" />
         </TouchableOpacity>
         <View style={styles.errorContainer}>
           <Ionicons name="lock-closed" size={48} color="#94A3B8" />
           <Text style={styles.errorTitle}>الشهادة غير متاحة بعد</Text>
           <Text style={styles.errorText}>{error}</Text>
-          <TouchableOpacity style={styles.goToCourseBtn} onPress={() => router.push('/(tabs)/course')}>
+          <TouchableOpacity style={styles.goToCourseBtn} onPress={() => router.replace('/(tabs)/course')}>
             <Text style={styles.goToCourseBtnText}>أكمل الدورة</Text>
           </TouchableOpacity>
         </View>
@@ -168,7 +171,10 @@ export default function Certificate() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <TouchableOpacity testID="cert-back-btn" onPress={() => router.back()} style={styles.backBtn}>
+      <TouchableOpacity testID="cert-back-btn" onPress={() => {
+        if (router.canGoBack()) router.back();
+        else router.replace('/(tabs)/home');
+      }} style={styles.backBtn}>
         <Ionicons name="arrow-forward" size={24} color="#0F172A" />
       </TouchableOpacity>
 

@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Dimensions, FlatList } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useAuth } from '../_layout';
@@ -15,22 +15,24 @@ export default function LessonViewer() {
   const router = useRouter();
   const [lesson, setLesson] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [currentSlide, setCurrentSlide] = useState(0);
   const [audioPlaying, setAudioPlaying] = useState(false);
   const [audioLoading, setAudioLoading] = useState(false);
   const flatListRef = useRef<FlatList>(null);
   const soundRef = useRef<Audio.Sound | null>(null);
-  const autoPlayRef = useRef(true);
+  const currentSlideRef = useRef(0);
+  const [currentSlide, setCurrentSlideState] = useState(0);
+  const isMountedRef = useRef(true);
 
-  useEffect(() => { fetchLesson(); return () => { stopAudio(); }; }, [id]);
+  const setCurrentSlide = (val: number) => {
+    currentSlideRef.current = val;
+    setCurrentSlideState(val);
+  };
 
-  // Auto-play audio when slide changes
   useEffect(() => {
-    if (lesson && autoPlayRef.current) {
-      const timer = setTimeout(() => playSlideAudio(), 500);
-      return () => clearTimeout(timer);
-    }
-  }, [currentSlide, lesson]);
+    isMountedRef.current = true;
+    fetchLesson();
+    return () => { isMountedRef.current = false; cleanupAudio(); };
+  }, [id]);
 
   const fetchLesson = async () => {
     try {
@@ -40,12 +42,14 @@ export default function LessonViewer() {
       if (res.ok) {
         const data = await res.json();
         setLesson(data.lesson);
+        // Auto-play first slide after lesson loads
+        setTimeout(() => { if (isMountedRef.current) startAudio(0); }, 800);
       }
     } catch (e) { console.log(e); }
     setLoading(false);
   };
 
-  const stopAudio = async () => {
+  const cleanupAudio = async () => {
     try {
       if (soundRef.current) {
         await soundRef.current.stopAsync();
@@ -53,14 +57,14 @@ export default function LessonViewer() {
         soundRef.current = null;
       }
     } catch (e) { /* ignore */ }
-    setAudioPlaying(false);
+    if (isMountedRef.current) setAudioPlaying(false);
   };
 
-  const playSlideAudio = async () => {
-    if (audioPlaying || audioLoading) {
-      await stopAudio();
-      return;
-    }
+  const startAudio = async (slideIndex: number) => {
+    // Stop any existing audio first
+    await cleanupAudio();
+    if (!isMountedRef.current) return;
+
     setAudioLoading(true);
     try {
       await Audio.setAudioModeAsync({
@@ -68,66 +72,93 @@ export default function LessonViewer() {
         playsInSilentModeIOS: true,
         staysActiveInBackground: false,
       });
-      const audioUrl = `${BACKEND_URL}/api/audio/slide/${id}/${currentSlide}`;
+      const audioUrl = `${BACKEND_URL}/api/audio/slide/${id}/${slideIndex}`;
       const { sound } = await Audio.Sound.createAsync(
         { uri: audioUrl },
         { shouldPlay: true }
       );
+      if (!isMountedRef.current) { await sound.unloadAsync(); return; }
       soundRef.current = sound;
       setAudioPlaying(true);
+      setAudioLoading(false);
+
       sound.setOnPlaybackStatusUpdate((status) => {
+        if (!isMountedRef.current) return;
         if (status.isLoaded && status.didJustFinish) {
           setAudioPlaying(false);
           soundRef.current = null;
           // Auto-advance to next slide when audio finishes
-          if (lesson && currentSlide < lesson.slides.length - 1) {
-            autoPlayRef.current = true;
-            goToSlide(currentSlide + 1);
+          const currentIdx = currentSlideRef.current;
+          if (lesson && currentIdx < (lesson.slides?.length || 0) - 1) {
+            const nextIdx = currentIdx + 1;
+            goToSlideAndPlay(nextIdx);
           }
         }
       });
     } catch (e) {
-      console.log('Audio play error:', e);
+      console.log('Audio error:', e);
+      if (isMountedRef.current) setAudioLoading(false);
     }
-    setAudioLoading(false);
+  };
+
+  const toggleAudio = async () => {
+    if (audioPlaying) {
+      await cleanupAudio();
+    } else {
+      await startAudio(currentSlideRef.current);
+    }
+  };
+
+  const goToSlideAndPlay = (index: number) => {
+    cleanupAudio();
+    setCurrentSlide(index);
+    flatListRef.current?.scrollToIndex({ index, animated: true });
+    // Play audio after small delay to let UI settle
+    setTimeout(() => { if (isMountedRef.current) startAudio(index); }, 600);
   };
 
   const markComplete = async () => {
     try {
       await fetch(`${BACKEND_URL}/api/course/lessons/${id}/complete`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` }
+        method: 'POST', headers: { 'Authorization': `Bearer ${token}` }
       });
-    } catch (e) { console.log(e); }
-  };
-
-  const goToSlide = (index: number) => {
-    stopAudio();
-    flatListRef.current?.scrollToIndex({ index, animated: true });
-    setCurrentSlide(index);
+    } catch (e) {}
   };
 
   const handleNext = () => {
     if (!lesson) return;
-    if (currentSlide < lesson.slides.length - 1) {
-      autoPlayRef.current = true;
-      goToSlide(currentSlide + 1);
+    if (currentSlideRef.current < lesson.slides.length - 1) {
+      goToSlideAndPlay(currentSlideRef.current + 1);
     } else {
-      stopAudio();
+      cleanupAudio();
       markComplete();
       router.push(`/quiz/${id}`);
     }
   };
 
   const handlePrev = () => {
-    if (currentSlide > 0) {
-      autoPlayRef.current = true;
-      goToSlide(currentSlide - 1);
+    if (currentSlideRef.current > 0) {
+      goToSlideAndPlay(currentSlideRef.current - 1);
     }
   };
 
+  const handleBack = () => {
+    cleanupAudio();
+    if (router.canGoBack()) router.back();
+    else router.replace('/(tabs)/course');
+  };
+
   if (loading) return <View style={styles.loader}><ActivityIndicator size="large" color="#1D4ED8" /></View>;
-  if (!lesson) return <View style={styles.loader}><Text style={{ fontSize: 16, color: '#64748B' }}>الدرس غير متاح</Text></View>;
+  if (!lesson) return (
+    <SafeAreaView style={styles.container}>
+      <View style={styles.loader}>
+        <Text style={{ fontSize: 16, color: '#64748B' }}>الدرس غير متاح</Text>
+        <TouchableOpacity style={styles.backFallback} onPress={() => router.replace('/(tabs)/course')}>
+          <Text style={styles.backFallbackText}>العودة للدورة</Text>
+        </TouchableOpacity>
+      </View>
+    </SafeAreaView>
+  );
 
   const slides = lesson.slides || [];
 
@@ -155,7 +186,7 @@ export default function LessonViewer() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.topBar}>
-        <TouchableOpacity testID="lesson-back-btn" onPress={() => { stopAudio(); router.back(); }} style={styles.topBtn}>
+        <TouchableOpacity testID="lesson-back-btn" onPress={handleBack} style={styles.topBtn}>
           <Ionicons name="arrow-forward" size={22} color="#0F172A" />
         </TouchableOpacity>
         <View style={styles.topCenter}>
@@ -167,7 +198,7 @@ export default function LessonViewer() {
 
       <View style={styles.audioBar}>
         <TouchableOpacity testID="play-audio-btn" style={[styles.audioBtn, audioPlaying && styles.audioBtnActive]}
-          onPress={() => { autoPlayRef.current = false; playSlideAudio(); }} disabled={audioLoading}>
+          onPress={toggleAudio} disabled={audioLoading}>
           {audioLoading ? <ActivityIndicator size="small" color="#fff" /> :
             <Ionicons name={audioPlaying ? 'pause' : 'play'} size={20} color="#fff" />}
         </TouchableOpacity>
@@ -181,7 +212,7 @@ export default function LessonViewer() {
 
       <View style={styles.dots}>
         {slides.map((_: any, i: number) => (
-          <TouchableOpacity key={i} onPress={() => { autoPlayRef.current = true; goToSlide(i); }}>
+          <TouchableOpacity key={i} onPress={() => goToSlideAndPlay(i)}>
             <View style={[styles.dot, i === currentSlide && styles.dotActive, i < currentSlide && styles.dotDone]} />
           </TouchableOpacity>
         ))}
@@ -191,17 +222,10 @@ export default function LessonViewer() {
         ref={flatListRef}
         data={slides}
         renderItem={renderSlide}
-        horizontal
-        pagingEnabled
+        horizontal pagingEnabled
         showsHorizontalScrollIndicator={false}
         keyExtractor={(_, i) => i.toString()}
-        onMomentumScrollEnd={(e) => {
-          const idx = Math.round(e.nativeEvent.contentOffset.x / (width - 32));
-          if (idx !== currentSlide) {
-            autoPlayRef.current = true;
-            setCurrentSlide(idx);
-          }
-        }}
+        scrollEnabled={false}
         contentContainerStyle={{ paddingHorizontal: 16 }}
         snapToInterval={width - 32}
         decelerationRate="fast"
@@ -226,9 +250,11 @@ export default function LessonViewer() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8FAFC' },
-  loader: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F8FAFC' },
+  loader: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F8FAFC', gap: 16 },
+  backFallback: { backgroundColor: '#1D4ED8', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12 },
+  backFallbackText: { color: '#fff', fontSize: 16, fontWeight: '700' },
   topBar: { flexDirection: 'row-reverse', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12 },
-  topBtn: { padding: 8 },
+  topBtn: { padding: 8, backgroundColor: '#F1F5F9', borderRadius: 10 },
   topCenter: { flex: 1, alignItems: 'center' },
   topTitle: { fontSize: 16, fontWeight: '700', color: '#0F172A' },
   topSub: { fontSize: 12, color: '#64748B', marginTop: 2 },

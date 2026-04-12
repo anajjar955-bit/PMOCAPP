@@ -109,7 +109,10 @@ export default function ExamScreen() {
             );
           })}
 
-          <TouchableOpacity testID="exam-done-btn" style={styles.doneBtn} onPress={() => router.back()}>
+          <TouchableOpacity testID="exam-done-btn" style={styles.doneBtn} onPress={() => {
+            if (router.canGoBack()) router.back();
+            else router.replace('/(tabs)/exams');
+          }}>
             <Text style={styles.doneBtnText}>العودة للاختبارات</Text>
           </TouchableOpacity>
           <View style={{ height: 32 }} />
@@ -124,8 +127,11 @@ export default function ExamScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.topBar}>
-        <TouchableOpacity onPress={() => Alert.alert('إنهاء الاختبار', 'سيتم فقد تقدمك. هل أنت متأكد؟', [{ text: 'إلغاء' }, { text: 'خروج', style: 'destructive', onPress: () => router.back() }])}>
-          <Ionicons name="close" size={24} color="#0F172A" />
+        <TouchableOpacity onPress={() => {
+            if (router.canGoBack()) router.back();
+            else router.replace('/(tabs)/exams');
+          }}>
+          <Ionicons name="arrow-forward" size={24} color="#0F172A" />
         </TouchableOpacity>
         <View style={[styles.timerBadge, timeLeft < 300 && styles.timerWarning]}>
           <Ionicons name="time" size={16} color={timeLeft < 300 ? '#DC2626' : '#1D4ED8'} />
