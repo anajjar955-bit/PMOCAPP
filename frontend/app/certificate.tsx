@@ -1,16 +1,21 @@
 import { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Image, ScrollView, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, ScrollView, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useAuth } from './_layout';
+import { useAuth, useLang } from './_layout';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
+import certImages from '../assets/cert_images.json';
 
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
 
+const PMI_LOGO_B64 = certImages.logo;
+const PMI_SEAL_B64 = certImages.seal;
+
 export default function Certificate() {
   const { token } = useAuth();
+  const { t, isRTL } = useLang();
   const router = useRouter();
   const [certificate, setCertificate] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -37,74 +42,86 @@ export default function Certificate() {
 
   const generateCertificateHTML = () => {
     if (!certificate) return '';
+    const date = new Date(certificate.issue_date);
+    const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    const formattedDate = `${date.getDate()} ${months[date.getMonth()]} ${date.getFullYear()}`;
+
     return `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="UTF-8">
 <style>
-@page { size: landscape; margin: 0; }
+@page { size: 11in 8.5in landscape; margin: 0; }
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
 * { margin: 0; padding: 0; box-sizing: border-box; }
-body { font-family: 'Segoe UI', Arial, sans-serif; background: #f0f0f0; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
-.cert-outer { width: 960px; height: 680px; background: #FFFFFF; position: relative; padding: 12px; }
-.cert-border { width: 100%; height: 100%; border: 3px solid #1B365D; position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px 60px; }
-.gold-line { position: absolute; top: 8px; left: 8px; right: 8px; bottom: 8px; border: 1px solid #D4A843; pointer-events: none; }
-.logo-section { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
-.logo-hex { width: 60px; height: 60px; background: #EA6A0B; clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%); display: flex; align-items: center; justify-content: center; }
-.logo-inner { width: 52px; height: 52px; background: #1B365D; clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%); display: flex; align-items: center; justify-content: center; }
-.logo-white { width: 44px; height: 44px; background: #FFFFFF; clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%); display: flex; align-items: center; justify-content: center; }
-.logo-text-box { color: #1B365D; font-weight: 900; font-size: 9px; text-align: center; line-height: 1.1; }
-.org-name { font-size: 16px; font-weight: 700; color: #1B365D; letter-spacing: 3px; }
-.divider { width: 120px; height: 2px; background: #D4A843; margin: 16px 0; }
-.cert-title { font-size: 32px; font-weight: 300; color: #1B365D; letter-spacing: 6px; text-transform: uppercase; margin-bottom: 6px; }
-.cert-sub { font-size: 13px; color: #666; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 24px; }
-.granted-text { font-size: 11px; color: #888; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 12px; }
-.recipient-name { font-size: 36px; font-weight: 700; color: #1B365D; margin-bottom: 8px; }
-.name-line { width: 300px; height: 1px; background: #1B365D; margin-bottom: 24px; }
-.course-label { font-size: 11px; color: #888; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 10px; }
-.course-name { font-size: 18px; font-weight: 600; color: #1B365D; margin-bottom: 4px; }
-.course-name-sub { font-size: 14px; color: #444; margin-bottom: 30px; }
-.footer-row { display: flex; justify-content: space-between; width: 100%; max-width: 600px; margin-top: auto; }
-.footer-item { text-align: center; }
-.footer-line { width: 140px; height: 1px; background: #1B365D; margin-bottom: 6px; }
-.footer-label { font-size: 10px; color: #888; letter-spacing: 1px; text-transform: uppercase; }
-.footer-value { font-size: 12px; color: #1B365D; font-weight: 600; margin-bottom: 4px; }
+body { font-family: 'Inter', 'Segoe UI', 'Aptos', Arial, sans-serif; background: #e8e8e8; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+.cert-page { width: 960px; height: 680px; background: #FFFFFF; position: relative; }
+/* Outer border - thick deep purple */
+.outer-border { position: absolute; top: 14px; left: 14px; right: 14px; bottom: 14px; border: 26px solid #3C0C78; }
+/* Inner border - thin lilac */
+.inner-border { position: absolute; top: 38px; left: 38px; right: 38px; bottom: 38px; border: 6px solid #CB65FF; }
+/* Content area */
+.content { position: absolute; top: 52px; left: 52px; right: 52px; bottom: 52px; display: flex; flex-direction: column; align-items: center; }
+/* PMI Logo at top center */
+.pmi-logo { margin-top: 30px; margin-bottom: 30px; }
+.pmi-logo img { height: 62px; width: auto; }
+/* Certificate title */
+.cert-title { font-size: 26px; font-weight: 700; color: #3C0C78; letter-spacing: 4px; text-transform: uppercase; margin-bottom: 12px; }
+/* Granted text */
+.granted-text { font-size: 11.5px; color: #333; letter-spacing: 3px; text-transform: uppercase; margin-bottom: 16px; }
+/* Recipient name */
+.recipient-name { font-size: 36px; font-weight: 400; color: #3B3838; margin-bottom: 20px; font-family: 'Inter', 'Aptos', sans-serif; }
+/* For completing text */
+.completing-text { font-size: 11.5px; color: #333; letter-spacing: 3px; text-transform: uppercase; margin-bottom: 16px; }
+/* Course name */
+.course-name { font-size: 22px; font-weight: 400; color: #3C0C78; margin-bottom: 12px; }
+/* Date */
+.cert-date { font-size: 15px; color: #3B3838; margin-bottom: 20px; }
+/* Bottom section */
+.bottom-section { position: absolute; bottom: 20px; left: 52px; right: 52px; display: flex; justify-content: space-between; align-items: flex-end; }
+/* Seal */
+.seal-area { }
+.seal-area img { width: 120px; height: 120px; }
+/* Instructor */
+.instructor-area { text-align: center; flex: 1; }
+.instructor-name { font-size: 12px; color: #3B3838; margin-bottom: 4px; font-weight: 600; }
+.instructor-line { width: 160px; height: 1px; background: #3B3838; margin: 0 auto 4px; }
+.instructor-label { font-size: 9px; color: #888; letter-spacing: 2px; text-transform: uppercase; }
+/* Company logo */
+.company-area { text-align: center; }
+.company-area img { height: 50px; width: auto; }
+.company-label { font-size: 8px; color: #888; letter-spacing: 1px; margin-top: 4px; }
 </style>
 </head>
 <body>
-<div class="cert-outer">
-<div class="cert-border">
-<div class="gold-line"></div>
-<div class="logo-section">
-<div class="logo-hex"><div class="logo-inner"><div class="logo-white"><div class="logo-text-box">PM<br>HOUSE</div></div></div></div>
-<div class="org-name">PM HOUSE</div>
-</div>
-<div class="divider"></div>
-<div class="cert-title">Certificate of Achievement</div>
-<div class="cert-sub">PMI Authorized Training Partner</div>
-<div class="granted-text">Is Hereby Granted To</div>
-<div class="recipient-name">${certificate.name}</div>
-<div class="name-line"></div>
-<div class="course-label">For Completing the Following Course</div>
-<div class="course-name">${certificate.course_name}</div>
-<div class="course-name-sub">PMI-PMO CP Intensive Preparation Program</div>
-<div class="footer-row">
-<div class="footer-item">
-<div class="footer-value">${certificate.issue_date}</div>
-<div class="footer-line"></div>
-<div class="footer-label">Date</div>
-</div>
-<div class="footer-item">
-<div class="footer-value">Ahmad Al-Najjar</div>
-<div class="footer-line"></div>
-<div class="footer-label">Instructor</div>
-</div>
-<div class="footer-item">
-<div class="footer-value">${certificate.certificate_id}</div>
-<div class="footer-line"></div>
-<div class="footer-label">Certificate ID</div>
-</div>
-</div>
-</div>
+<div class="cert-page">
+  <div class="outer-border"></div>
+  <div class="inner-border"></div>
+  <div class="content">
+    <div class="pmi-logo">
+      <img src="data:image/png;base64,${PMI_LOGO_B64}" alt="PMI Logo" />
+    </div>
+    <div class="cert-title">Certificate of Achievement</div>
+    <div class="granted-text">Is Hereby Granted To</div>
+    <div class="recipient-name">${certificate.name}</div>
+    <div class="completing-text">For Completing the Following Course</div>
+    <div class="course-name">${certificate.course_name}</div>
+    <div class="cert-date">${formattedDate}</div>
+  </div>
+  <div class="bottom-section">
+    <div class="seal-area">
+      <img src="data:image/png;base64,${PMI_SEAL_B64}" alt="PMI Seal" />
+    </div>
+    <div class="instructor-area">
+      <div class="instructor-name">Ahmad Al-Najjar</div>
+      <div class="instructor-line"></div>
+      <div class="instructor-label">Name of Instructor</div>
+    </div>
+    <div class="company-area">
+      <img src="data:image/png;base64,${PMI_LOGO_B64}" alt="PM House" style="height: 40px;" />
+      <div class="company-label">PMHouse.org</div>
+    </div>
+  </div>
 </div>
 </body>
 </html>`;
@@ -144,78 +161,75 @@ body { font-family: 'Segoe UI', Arial, sans-serif; background: #f0f0f0; display:
     else router.replace('/(tabs)/home');
   };
 
-  if (loading) return <View style={s.loader}><ActivityIndicator size="large" color="#1B365D" /></View>;
+  if (loading) return <View style={s.loader}><ActivityIndicator size="large" color="#3C0C78" /></View>;
 
   if (error) {
     return (
       <SafeAreaView style={s.container}>
         <TouchableOpacity testID="cert-back-btn" onPress={goBack} style={s.backBtn}>
-          <Ionicons name="arrow-forward" size={24} color="#1B365D" />
+          <Ionicons name={isRTL ? "arrow-forward" : "arrow-back"} size={24} color="#3C0C78" />
         </TouchableOpacity>
         <View style={s.errorContainer}>
           <Ionicons name="lock-closed" size={48} color="#94A3B8" />
-          <Text style={s.errorTitle}>Certificate Not Available</Text>
+          <Text style={s.errorTitle}>{t('الشهادة غير متاحة', 'Certificate Not Available')}</Text>
           <Text style={s.errorText}>{error}</Text>
           <TouchableOpacity style={s.courseBtn} onPress={() => router.replace('/(tabs)/course')}>
-            <Text style={s.courseBtnText}>Complete the Course</Text>
+            <Text style={s.courseBtnText}>{t('أكمل الدورة', 'Complete the Course')}</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
     );
   }
 
+  const date = new Date(certificate?.issue_date || '');
+  const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const formattedDate = `${date.getDate()} ${months[date.getMonth()]} ${date.getFullYear()}`;
+
   return (
     <SafeAreaView style={s.container}>
       <TouchableOpacity testID="cert-back-btn" onPress={goBack} style={s.backBtn}>
-        <Ionicons name="arrow-forward" size={24} color="#1B365D" />
+        <Ionicons name={isRTL ? "arrow-forward" : "arrow-back"} size={24} color="#3C0C78" />
       </TouchableOpacity>
       <ScrollView contentContainerStyle={s.scroll}>
         {/* Certificate Preview */}
         <View style={s.certCard}>
-          <View style={s.certBorder}>
-            <View style={s.goldLine} />
-            {/* Logo */}
-            <Image source={require('../assets/images/pmhouse-logo.png')} style={s.certLogo} resizeMode="contain" />
-            <Text style={s.orgName}>PM HOUSE</Text>
-            <View style={s.divider} />
-            <Text style={s.certTitle}>CERTIFICATE OF ACHIEVEMENT</Text>
-            <Text style={s.certSub}>PMI Authorized Training Partner</Text>
-            <Text style={s.grantedText}>IS HEREBY GRANTED TO</Text>
-            <Text style={s.recipientName}>{certificate?.name}</Text>
-            <View style={s.nameLine} />
-            <Text style={s.courseLabel}>FOR COMPLETING THE FOLLOWING COURSE</Text>
-            <Text style={s.courseName}>{certificate?.course_name}</Text>
-            <Text style={s.courseNameSub}>PMI-PMO CP Intensive Preparation Program</Text>
-            {/* Footer */}
-            <View style={s.footerRow}>
-              <View style={s.footerItem}>
-                <Text style={s.footerValue}>{certificate?.issue_date}</Text>
-                <View style={s.footerLine} />
-                <Text style={s.footerLabel}>Date</Text>
-              </View>
-              <View style={s.footerItem}>
-                <Text style={s.footerValue}>Ahmad Al-Najjar</Text>
-                <View style={s.footerLine} />
-                <Text style={s.footerLabel}>Instructor</Text>
-              </View>
-              <View style={s.footerItem}>
-                <Text style={s.footerValue}>{certificate?.certificate_id}</Text>
-                <View style={s.footerLine} />
-                <Text style={s.footerLabel}>Certificate ID</Text>
+          {/* Outer border */}
+          <View style={s.outerBorder}>
+            {/* Inner border */}
+            <View style={s.innerBorder}>
+              {/* Content */}
+              <View style={s.certContent}>
+                {/* Title */}
+                <Text style={s.certTitle}>CERTIFICATE OF ACHIEVEMENT</Text>
+                <Text style={s.grantedText}>IS HEREBY GRANTED TO</Text>
+                <Text style={s.recipientName}>{certificate?.name}</Text>
+                <Text style={s.completingText}>FOR COMPLETING THE FOLLOWING COURSE</Text>
+                <Text style={s.courseName}>{certificate?.course_name}</Text>
+                <Text style={s.certDate}>{formattedDate}</Text>
+
+                {/* Bottom row */}
+                <View style={s.bottomRow}>
+                  <View style={s.instructorArea}>
+                    <Text style={s.instructorName}>Ahmad Al-Najjar</Text>
+                    <View style={s.instructorLine} />
+                    <Text style={s.instructorLabel}>Name of Instructor</Text>
+                  </View>
+                </View>
               </View>
             </View>
           </View>
         </View>
+
         {/* Action Buttons */}
         <View style={s.actions}>
           <TouchableOpacity testID="download-cert-btn" style={s.downloadBtn} onPress={shareCertificate} disabled={sharing}>
             {sharing ? <ActivityIndicator color="#fff" /> : (
-              <><Ionicons name="download-outline" size={22} color="#fff" /><Text style={s.downloadText}>Download PDF</Text></>
+              <><Ionicons name="download-outline" size={22} color="#fff" /><Text style={s.downloadText}>{t('تحميل PDF', 'Download PDF')}</Text></>
             )}
           </TouchableOpacity>
           <TouchableOpacity testID="print-cert-btn" style={s.printBtn} onPress={printCertificate}>
-            <Ionicons name="print-outline" size={22} color="#1B365D" />
-            <Text style={s.printText}>Print Certificate</Text>
+            <Ionicons name="print-outline" size={22} color="#3C0C78" />
+            <Text style={s.printText}>{t('طباعة الشهادة', 'Print Certificate')}</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -228,33 +242,29 @@ const s = StyleSheet.create({
   loader: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F5F5F0' },
   backBtn: { padding: 16 },
   errorContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },
-  errorTitle: { fontSize: 20, fontWeight: '700', color: '#1B365D', marginTop: 16 },
+  errorTitle: { fontSize: 20, fontWeight: '700', color: '#3C0C78', marginTop: 16 },
   errorText: { fontSize: 15, color: '#666', marginTop: 8, textAlign: 'center' },
-  courseBtn: { backgroundColor: '#1B365D', paddingHorizontal: 32, paddingVertical: 12, borderRadius: 8, marginTop: 20 },
+  courseBtn: { backgroundColor: '#3C0C78', paddingHorizontal: 32, paddingVertical: 12, borderRadius: 8, marginTop: 20 },
   courseBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
   scroll: { flexGrow: 1, padding: 12 },
-  certCard: { backgroundColor: '#FFFFFF', borderRadius: 4, padding: 10, elevation: 6, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 12 },
-  certBorder: { borderWidth: 3, borderColor: '#1B365D', padding: 24, alignItems: 'center', position: 'relative' },
-  goldLine: { position: 'absolute', top: 6, left: 6, right: 6, bottom: 6, borderWidth: 1, borderColor: '#D4A843' },
-  certLogo: { width: 56, height: 56, marginBottom: 6 },
-  orgName: { fontSize: 14, fontWeight: '700', color: '#1B365D', letterSpacing: 3 },
-  divider: { width: 100, height: 2, backgroundColor: '#D4A843', marginVertical: 12 },
-  certTitle: { fontSize: 20, fontWeight: '300', color: '#1B365D', letterSpacing: 3, marginBottom: 4 },
-  certSub: { fontSize: 10, color: '#888', letterSpacing: 2, marginBottom: 16 },
-  grantedText: { fontSize: 9, color: '#888', letterSpacing: 2, marginBottom: 8 },
-  recipientName: { fontSize: 26, fontWeight: '700', color: '#1B365D', marginBottom: 6 },
-  nameLine: { width: 220, height: 1, backgroundColor: '#1B365D', marginBottom: 16 },
-  courseLabel: { fontSize: 9, color: '#888', letterSpacing: 2, marginBottom: 8 },
-  courseName: { fontSize: 15, fontWeight: '600', color: '#1B365D', marginBottom: 2 },
-  courseNameSub: { fontSize: 12, color: '#666', marginBottom: 20 },
-  footerRow: { flexDirection: 'row', justifyContent: 'space-between', width: '100%', paddingHorizontal: 8, marginTop: 8 },
-  footerItem: { alignItems: 'center', flex: 1 },
-  footerValue: { fontSize: 11, fontWeight: '600', color: '#1B365D', marginBottom: 4 },
-  footerLine: { width: 100, height: 1, backgroundColor: '#1B365D', marginBottom: 4 },
-  footerLabel: { fontSize: 8, color: '#888', letterSpacing: 1 },
+  certCard: { backgroundColor: '#FFFFFF', borderRadius: 2, elevation: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 14, padding: 6 },
+  outerBorder: { borderWidth: 10, borderColor: '#3C0C78', padding: 6 },
+  innerBorder: { borderWidth: 3, borderColor: '#CB65FF', padding: 16 },
+  certContent: { alignItems: 'center', paddingVertical: 12, paddingHorizontal: 8 },
+  certTitle: { fontSize: 17, fontWeight: '700', color: '#3C0C78', letterSpacing: 3, marginBottom: 8, marginTop: 8 },
+  grantedText: { fontSize: 8, color: '#333', letterSpacing: 2, marginBottom: 10 },
+  recipientName: { fontSize: 24, fontWeight: '400', color: '#3B3838', marginBottom: 12 },
+  completingText: { fontSize: 8, color: '#333', letterSpacing: 2, marginBottom: 10 },
+  courseName: { fontSize: 15, fontWeight: '400', color: '#3C0C78', marginBottom: 6 },
+  certDate: { fontSize: 11, color: '#3B3838', marginBottom: 16 },
+  bottomRow: { flexDirection: 'row', justifyContent: 'center', width: '100%', marginTop: 8 },
+  instructorArea: { alignItems: 'center' },
+  instructorName: { fontSize: 10, fontWeight: '600', color: '#3B3838', marginBottom: 4 },
+  instructorLine: { width: 120, height: 1, backgroundColor: '#3B3838', marginBottom: 3 },
+  instructorLabel: { fontSize: 7, color: '#888', letterSpacing: 1 },
   actions: { gap: 10, marginTop: 16 },
-  downloadBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: '#1B365D', paddingVertical: 15, borderRadius: 8 },
+  downloadBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: '#3C0C78', paddingVertical: 15, borderRadius: 8 },
   downloadText: { color: '#fff', fontSize: 16, fontWeight: '700' },
-  printBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: '#fff', paddingVertical: 13, borderRadius: 8, borderWidth: 2, borderColor: '#1B365D' },
-  printText: { color: '#1B365D', fontSize: 15, fontWeight: '700' },
+  printBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: '#fff', paddingVertical: 13, borderRadius: 8, borderWidth: 2, borderColor: '#3C0C78' },
+  printText: { color: '#3C0C78', fontSize: 15, fontWeight: '700' },
 });
