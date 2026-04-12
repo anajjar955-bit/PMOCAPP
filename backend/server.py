@@ -418,7 +418,7 @@ async def get_progress(request: Request):
 @api_router.get("/audio/slide/{lesson_id}/{slide_index}")
 async def get_slide_audio(lesson_id: str, slide_index: int, request: Request):
     """Generate TTS audio with ElevenLabs Egyptian Arabic voice"""
-    cache_key = f"{lesson_id}_{slide_index}_akv10"
+    cache_key = f"{lesson_id}_{slide_index}_akv11"
     cached = await db.audio_cache.find_one({"cache_key": cache_key}, {"_id": 0})
     if cached and cached.get("audio_base64"):
         audio_bytes = base64.b64decode(cached["audio_base64"])
@@ -446,43 +446,46 @@ async def get_slide_audio(lesson_id: str, slide_index: int, request: Request):
         chat = LlmChat(
             api_key=os.getenv("EMERGENT_LLM_KEY"),
             session_id=sid,
-            system_message="انت محاضر مصري محترف ومتمكن في ادارة المشاريع. اسلوبك جذاب وحماسي وبتوصل المعلومة ببساطة. بتشرح بالعامية المصرية."
+            system_message="انت محاضر مصري محترف. بتشرح بعامية مصرية بسيطة وسلسة."
         )
         chat = chat.with_model("openai", "gpt-4o-mini")
-        prompt = f"""اكتب سكريبت محاضرة احترافية لشرح المحتوى ده:
+        prompt = f"""اكتب سكريبت صوتي قصير لشرح ده:
 
 {slide_content}
 
-القواعد:
-1. اشرح بالعامية المصرية كمحاضر محترف ومصحصح وجذاب
-2. بدون اي تشكيل على اي كلمة
-3. ممنوع اصوات تعبيرية: آه، ييه، هاا، اوه، ممم
-4. ممنوع تكرار اي كلمة مرتين ورا بعض
-5. ابدأ مباشرة بسؤال او حقيقة مثيرة تلفت الانتباه
-6. استخدم عبارات محاضر محترف زي: تخيلوا معايا، لاحظوا كده، السؤال المهم هنا، الحكاية ببساطة، يعني ايه الكلام ده عمليا
-7. ادي مثال عملي من الواقع لو ممكن
-8. اختم بخلاصة قوية ومحفزة
-9. جمل قصيرة وواضحة
-10. اكتب الارقام بالحروف
-11. الطول: ستين الى ثمانين كلمة
-12. نص متصل بدون عناوين او نقاط"""
+قواعد صارمة:
+- عامية مصرية بسيطة وسهلة النطق
+- بدون تشكيل نهائي
+- كل جملة اربع لسبع كلمات فقط
+- ممنوع كلمات صعبة النطق او طويلة
+- ممنوع تكرار اي كلمة
+- ممنوع آه وييه وهاا وممم واوه
+- ابدأ بسؤال بسيط
+- اختم بجملة واحدة ملخصة
+- ارقام بالحروف
+- خمسين كلمة فقط
+- بدون عناوين او نقاط"""
 
         narration = await chat.send_message(UserMessage(text=prompt))
         narration = narration.strip()[:4096]
-        # Clean any remaining filler sounds
         import re
-        narration = re.sub(r'آ{2,}ه?', '', narration)
-        narration = re.sub(r'ي{3,}ه?', '', narration)
+        # Aggressive cleaning
+        narration = re.sub(r'[آأإ]{2,}ه?', '', narration)
+        narration = re.sub(r'ي{2,}ه?', '', narration)
         narration = re.sub(r'ها{2,}', '', narration)
-        narration = re.sub(r'أو{2,}ه?', '', narration)
-        narration = re.sub(r'م{3,}', '', narration)
+        narration = re.sub(r'[أا]و{2,}ه?', '', narration)
+        narration = re.sub(r'م{2,}', 'م', narration)
+        narration = re.sub(r'(.)\1{2,}', r'\1', narration)  # Max 1 consecutive same char
+        # Remove repeated words
+        narration = re.sub(r'\b(\S+)\s+\1\b', r'\1', narration)
+        narration = re.sub(r'\b(\S+)\s+\1\b', r'\1', narration)  # Run twice for nested
+        narration = re.sub(r'(ال)\s+(ال)', r'ال', narration)
+        # Remove extra spaces and dots
+        narration = re.sub(r'\.{2,}', '.', narration)
         narration = re.sub(r'\s{2,}', ' ', narration).strip()
-        # Clean stuttering: remove repeated words/phrases
-        narration = re.sub(r'\b(\w+)\s+\1\b', r'\1', narration)  # Remove duplicate consecutive words
-        narration = re.sub(r'(ال)\s+(ال)', r'ال', narration)  # Fix "ال ال" stuttering
-        narration = re.sub(r'(.)\1{2,}', r'\1\1', narration)  # Max 2 consecutive same chars
-        narration = re.sub(r'\s{2,}', ' ', narration).strip()
-        logger.info(f"Narration for {cache_key}: {narration[:80]}...")
+        # Remove leading/trailing punctuation artifacts
+        narration = re.sub(r'^[،,.\s]+', '', narration)
+        logger.info(f"Narration for {cache_key}: {narration[:100]}...")
     except Exception as e:
         logger.error(f"GPT narration failed: {e}")
         narration = f"{slide['title']}. {slide.get('content', '')}."
@@ -499,9 +502,9 @@ async def get_slide_audio(lesson_id: str, slide_index: int, request: Request):
             voice_id=voice_id,
             model_id="eleven_multilingual_v2",
             voice_settings=VoiceSettings(
-                stability=0.55,
-                similarity_boost=0.65,
-                style=0.3,
+                stability=0.65,
+                similarity_boost=0.6,
+                style=0.2,
                 use_speaker_boost=False
             )
         )
@@ -530,7 +533,7 @@ async def get_slide_subtitle(lesson_id: str, slide_index: int, lang: str = "ar")
     if lang == "en":
         cache_key = f"{lesson_id}_{slide_index}_en"
     else:
-        cache_key = f"{lesson_id}_{slide_index}_akv10"
+        cache_key = f"{lesson_id}_{slide_index}_akv11"
     cached = await db.audio_cache.find_one({"cache_key": cache_key}, {"_id": 0, "narration_text": 1})
     if cached and cached.get("narration_text"):
         return {"text": cached["narration_text"]}
