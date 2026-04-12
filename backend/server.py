@@ -1,58 +1,392 @@
-from fastapi import FastAPI, APIRouter
 from dotenv import load_dotenv
+load_dotenv()
+
+from fastapi import FastAPI, APIRouter, HTTPException, Request, Depends
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
+from bson import ObjectId
 import os
 import logging
-from pathlib import Path
-from pydantic import BaseModel, Field
-from typing import List
+import bcrypt
+import jwt
+import secrets
 import uuid
-from datetime import datetime
-
-
-ROOT_DIR = Path(__file__).parent
-load_dotenv(ROOT_DIR / '.env')
+from datetime import datetime, timezone, timedelta
+from pydantic import BaseModel
+from typing import Optional
+import pathlib
 
 # MongoDB connection
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
+db = client[os.environ.get('DB_NAME', 'pmhouse_academy')]
 
-# Create the main app without a prefix
+JWT_SECRET = os.environ.get('JWT_SECRET', secrets.token_hex(32))
+JWT_ALGORITHM = "HS256"
+PAYPAL_LINK = "https://www.paypal.com/ncp/payment/QEL5ME5XAAD96"
+
 app = FastAPI()
-
-# Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
 
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
-# Define Models
-class StatusCheck(BaseModel):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    client_name: str
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+# ========== Pydantic Models ==========
+class RegisterRequest(BaseModel):
+    email: str
+    password: str
+    name: str
 
-class StatusCheckCreate(BaseModel):
-    client_name: str
+class LoginRequest(BaseModel):
+    email: str
+    password: str
 
-# Add your routes to the router instead of directly to app
-@api_router.get("/")
-async def root():
-    return {"message": "Hello World"}
+class QuizSubmission(BaseModel):
+    answers: dict
 
-@api_router.post("/status", response_model=StatusCheck)
-async def create_status_check(input: StatusCheckCreate):
-    status_dict = input.dict()
-    status_obj = StatusCheck(**status_dict)
-    _ = await db.status_checks.insert_one(status_obj.dict())
-    return status_obj
+class ExamSubmission(BaseModel):
+    answers: dict
 
-@api_router.get("/status", response_model=List[StatusCheck])
-async def get_status_checks():
-    status_checks = await db.status_checks.find().to_list(1000)
-    return [StatusCheck(**status_check) for status_check in status_checks]
+class PaymentConfirmation(BaseModel):
+    transaction_id: Optional[str] = None
 
-# Include the router in the main app
+# ========== Auth Helpers ==========
+def hash_password(password: str) -> str:
+    salt = bcrypt.gensalt()
+    return bcrypt.hashpw(password.encode("utf-8"), salt).decode("utf-8")
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    return bcrypt.checkpw(plain_password.encode("utf-8"), hashed_password.encode("utf-8"))
+
+def create_access_token(user_id: str, email: str) -> str:
+    payload = {
+        "sub": user_id,
+        "email": email,
+        "exp": datetime.now(timezone.utc) + timedelta(days=7),
+        "type": "access"
+    }
+    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+
+async def get_current_user(request: Request) -> dict:
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    token = auth_header[7:]
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        if payload.get("type") != "access":
+            raise HTTPException(status_code=401, detail="Invalid token type")
+        user = await db.users.find_one({"_id": ObjectId(payload["sub"])})
+        if not user:
+            raise HTTPException(status_code=401, detail="User not found")
+        user["id"] = str(user["_id"])
+        del user["_id"]
+        user.pop("password_hash", None)
+        return user
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+async def get_optional_user(request: Request):
+    try:
+        return await get_current_user(request)
+    except Exception:
+        return None
+
+# ========== Auth Routes ==========
+@api_router.post("/auth/register")
+async def register(req: RegisterRequest):
+    email = req.email.lower().strip()
+    if not email or not req.password or len(req.password) < 6:
+        raise HTTPException(status_code=400, detail="Invalid email or password (min 6 chars)")
+    existing = await db.users.find_one({"email": email})
+    if existing:
+        raise HTTPException(status_code=400, detail="البريد الإلكتروني مسجل مسبقاً")
+    user_doc = {
+        "email": email,
+        "password_hash": hash_password(req.password),
+        "name": req.name,
+        "role": "user",
+        "is_paid": False,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "progress": {"completed_lessons": [], "quiz_scores": {}, "exam_attempts": []}
+    }
+    result = await db.users.insert_one(user_doc)
+    user_id = str(result.inserted_id)
+    token = create_access_token(user_id, email)
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "user": {
+            "id": user_id, "email": email, "name": req.name,
+            "role": "user", "is_paid": False,
+            "progress": user_doc["progress"]
+        }
+    }
+
+@api_router.post("/auth/login")
+async def login(req: LoginRequest):
+    email = req.email.lower().strip()
+    user = await db.users.find_one({"email": email})
+    if not user:
+        raise HTTPException(status_code=401, detail="بريد إلكتروني أو كلمة مرور غير صحيحة")
+    if not verify_password(req.password, user["password_hash"]):
+        raise HTTPException(status_code=401, detail="بريد إلكتروني أو كلمة مرور غير صحيحة")
+    user_id = str(user["_id"])
+    token = create_access_token(user_id, email)
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "user": {
+            "id": user_id, "email": user["email"], "name": user.get("name", ""),
+            "role": user.get("role", "user"), "is_paid": user.get("is_paid", False),
+            "progress": user.get("progress", {"completed_lessons": [], "quiz_scores": {}, "exam_attempts": []})
+        }
+    }
+
+@api_router.get("/auth/me")
+async def get_me(request: Request):
+    user = await get_current_user(request)
+    return {"user": user}
+
+# ========== Course Routes ==========
+@api_router.get("/course/modules")
+async def get_modules(request: Request):
+    user = await get_optional_user(request)
+    modules = await db.modules.find({}, {"_id": 0}).sort("order", 1).to_list(100)
+    for module in modules:
+        lessons = await db.lessons.find({"module_id": module["id"]}, {"_id": 0, "id": 1, "is_demo": 1}).to_list(100)
+        module["lesson_count"] = len(lessons)
+        module["demo_lessons"] = sum(1 for l in lessons if l.get("is_demo", False))
+        if user:
+            completed = user.get("progress", {}).get("completed_lessons", [])
+            module["completed_lessons"] = sum(1 for l in lessons if l["id"] in completed)
+        else:
+            module["completed_lessons"] = 0
+    return {"modules": modules}
+
+@api_router.get("/course/modules/{module_id}/lessons")
+async def get_module_lessons(module_id: str, request: Request):
+    user = await get_optional_user(request)
+    lessons = await db.lessons.find({"module_id": module_id}, {"_id": 0, "slides": 0}).sort("order", 1).to_list(100)
+    if user:
+        completed = user.get("progress", {}).get("completed_lessons", [])
+        quiz_scores = user.get("progress", {}).get("quiz_scores", {})
+        is_paid = user.get("is_paid", False)
+        for lesson in lessons:
+            lesson["is_completed"] = lesson["id"] in completed
+            lesson["quiz_score"] = quiz_scores.get(lesson["id"])
+            lesson["is_accessible"] = lesson.get("is_demo", False) or is_paid
+    else:
+        for lesson in lessons:
+            lesson["is_completed"] = False
+            lesson["quiz_score"] = None
+            lesson["is_accessible"] = lesson.get("is_demo", False)
+    return {"lessons": lessons}
+
+@api_router.get("/course/lessons/{lesson_id}")
+async def get_lesson(lesson_id: str, request: Request):
+    user = await get_optional_user(request)
+    is_paid = user.get("is_paid", False) if user else False
+    lesson = await db.lessons.find_one({"id": lesson_id}, {"_id": 0})
+    if not lesson:
+        raise HTTPException(status_code=404, detail="الدرس غير موجود")
+    if not lesson.get("is_demo", False) and not is_paid:
+        raise HTTPException(status_code=403, detail="يجب الاشتراك للوصول لهذا الدرس")
+    return {"lesson": lesson}
+
+@api_router.get("/course/lessons/{lesson_id}/quiz")
+async def get_lesson_quiz(lesson_id: str, request: Request):
+    user = await get_current_user(request)
+    questions = await db.questions.find(
+        {"lesson_id": lesson_id}, {"_id": 0, "correct_answer": 0, "explanation": 0}
+    ).to_list(100)
+    return {"questions": questions}
+
+@api_router.post("/course/lessons/{lesson_id}/quiz/submit")
+async def submit_quiz(lesson_id: str, submission: QuizSubmission, request: Request):
+    user = await get_current_user(request)
+    questions = await db.questions.find({"lesson_id": lesson_id}, {"_id": 0}).to_list(100)
+    total = len(questions)
+    correct = 0
+    results = {}
+    for q in questions:
+        user_answer = submission.answers.get(q["id"])
+        is_correct = user_answer == q["correct_answer"]
+        if is_correct:
+            correct += 1
+        results[q["id"]] = {
+            "correct": is_correct,
+            "correct_answer": q["correct_answer"],
+            "user_answer": user_answer,
+            "explanation": q.get("explanation", "")
+        }
+    score = round((correct / total) * 100) if total > 0 else 0
+    await db.users.update_one(
+        {"_id": ObjectId(user["id"])},
+        {"$set": {f"progress.quiz_scores.{lesson_id}": score}}
+    )
+    return {"score": score, "correct": correct, "total": total, "results": results}
+
+@api_router.post("/course/lessons/{lesson_id}/complete")
+async def complete_lesson(lesson_id: str, request: Request):
+    user = await get_current_user(request)
+    await db.users.update_one(
+        {"_id": ObjectId(user["id"])},
+        {"$addToSet": {"progress.completed_lessons": lesson_id}}
+    )
+    return {"success": True}
+
+# ========== Exam Routes ==========
+@api_router.get("/exams")
+async def get_exams(request: Request):
+    user = await get_optional_user(request)
+    exams = await db.exams.find({}, {"_id": 0}).to_list(10)
+    if user:
+        for exam in exams:
+            attempts = await db.exam_attempts.find(
+                {"user_id": user["id"], "exam_id": exam["id"]},
+                {"_id": 0, "score": 1, "created_at": 1, "correct": 1, "total": 1}
+            ).sort("created_at", -1).to_list(10)
+            exam["attempts"] = attempts
+            exam["is_accessible"] = user.get("is_paid", False)
+    else:
+        for exam in exams:
+            exam["attempts"] = []
+            exam["is_accessible"] = False
+    return {"exams": exams}
+
+@api_router.get("/exams/{exam_id}")
+async def get_exam(exam_id: str, request: Request):
+    user = await get_current_user(request)
+    if not user.get("is_paid", False):
+        raise HTTPException(status_code=403, detail="يجب الاشتراك للوصول للاختبارات")
+    exam = await db.exams.find_one({"id": exam_id}, {"_id": 0})
+    if not exam:
+        raise HTTPException(status_code=404, detail="الاختبار غير موجود")
+    questions = await db.exam_questions.find(
+        {"exam_id": exam_id}, {"_id": 0, "correct_answer": 0, "explanation": 0}
+    ).to_list(100)
+    return {"exam": exam, "questions": questions}
+
+@api_router.post("/exams/{exam_id}/submit")
+async def submit_exam(exam_id: str, submission: ExamSubmission, request: Request):
+    user = await get_current_user(request)
+    questions = await db.exam_questions.find({"exam_id": exam_id}, {"_id": 0}).to_list(100)
+    total = len(questions)
+    correct = 0
+    results = {}
+    domain_scores = {}
+    for q in questions:
+        user_answer = submission.answers.get(q["id"])
+        is_correct = user_answer == q["correct_answer"]
+        if is_correct:
+            correct += 1
+        domain = q.get("domain", "unknown")
+        if domain not in domain_scores:
+            domain_scores[domain] = {"correct": 0, "total": 0}
+        domain_scores[domain]["total"] += 1
+        if is_correct:
+            domain_scores[domain]["correct"] += 1
+        results[q["id"]] = {
+            "correct": is_correct,
+            "correct_answer": q["correct_answer"],
+            "user_answer": user_answer,
+            "explanation": q.get("explanation", "")
+        }
+    score = round((correct / total) * 100) if total > 0 else 0
+    attempt = {
+        "id": str(uuid.uuid4()),
+        "user_id": user["id"],
+        "exam_id": exam_id,
+        "score": score,
+        "correct": correct,
+        "total": total,
+        "domain_scores": domain_scores,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.exam_attempts.insert_one(attempt)
+    await db.users.update_one(
+        {"_id": ObjectId(user["id"])},
+        {"$push": {"progress.exam_attempts": {
+            "exam_id": exam_id, "score": score,
+            "date": datetime.now(timezone.utc).isoformat()
+        }}}
+    )
+    return {"score": score, "correct": correct, "total": total, "results": results, "domain_scores": domain_scores}
+
+# ========== Progress Routes ==========
+@api_router.get("/progress")
+async def get_progress(request: Request):
+    user = await get_current_user(request)
+    total_lessons = await db.lessons.count_documents({})
+    completed = len(user.get("progress", {}).get("completed_lessons", []))
+    return {
+        "total_lessons": total_lessons,
+        "completed_lessons": completed,
+        "completed_lesson_ids": user.get("progress", {}).get("completed_lessons", []),
+        "progress_percentage": round((completed / total_lessons) * 100) if total_lessons > 0 else 0,
+        "quiz_scores": user.get("progress", {}).get("quiz_scores", {}),
+        "exam_attempts": user.get("progress", {}).get("exam_attempts", []),
+        "is_course_complete": completed >= total_lessons
+    }
+
+# ========== Payment Routes ==========
+@api_router.get("/payment/link")
+async def get_payment_link():
+    return {"paypal_link": PAYPAL_LINK}
+
+@api_router.post("/payment/confirm")
+async def confirm_payment(confirmation: PaymentConfirmation, request: Request):
+    user = await get_current_user(request)
+    await db.users.update_one(
+        {"_id": ObjectId(user["id"])},
+        {"$set": {
+            "is_paid": True,
+            "payment_date": datetime.now(timezone.utc).isoformat(),
+            "payment_transaction_id": confirmation.transaction_id
+        }}
+    )
+    return {"success": True, "is_paid": True}
+
+# ========== Certificate Routes ==========
+@api_router.get("/certificate")
+async def get_certificate(request: Request):
+    user = await get_current_user(request)
+    total_lessons = await db.lessons.count_documents({})
+    completed = len(user.get("progress", {}).get("completed_lessons", []))
+    if completed < total_lessons:
+        raise HTTPException(status_code=400, detail=f"الدورة غير مكتملة. أكملت {completed} من {total_lessons} درس")
+    return {
+        "certificate": {
+            "name": user.get("name", ""),
+            "email": user.get("email", ""),
+            "course_name": "PMI-PMO CP Exam Preparation",
+            "course_name_ar": "الإعداد لاختبار شهادة محترف مكتب إدارة المشاريع",
+            "issuer": "PM House",
+            "issue_date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+            "certificate_id": f"PMHOUSE-{user['id'][:8].upper()}"
+        }
+    }
+
+# ========== Admin Routes ==========
+@api_router.post("/admin/activate-user")
+async def activate_user(request: Request):
+    user = await get_current_user(request)
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    body = await request.json()
+    email = body.get("email", "").lower().strip()
+    result = await db.users.update_one(
+        {"email": email},
+        {"$set": {"is_paid": True, "payment_date": datetime.now(timezone.utc).isoformat()}}
+    )
+    if result.modified_count == 0:
+        raise HTTPException(status_code=404, detail="User not found")
+    return {"success": True}
+
+# ========== Include Router & Middleware ==========
 app.include_router(api_router)
 
 app.add_middleware(
@@ -63,12 +397,50 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+# ========== Startup ==========
+@app.on_event("startup")
+async def startup():
+    await db.users.create_index("email", unique=True)
+    # Seed admin
+    admin_email = os.environ.get("ADMIN_EMAIL", "admin@pmhouse.com")
+    admin_password = os.environ.get("ADMIN_PASSWORD", "PMHouse@2024")
+    existing = await db.users.find_one({"email": admin_email})
+    if not existing:
+        await db.users.insert_one({
+            "email": admin_email,
+            "password_hash": hash_password(admin_password),
+            "name": "Admin",
+            "role": "admin",
+            "is_paid": True,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "progress": {"completed_lessons": [], "quiz_scores": {}, "exam_attempts": []}
+        })
+        logger.info(f"Admin user created: {admin_email}")
+    # Seed course data
+    from course_data import get_course_data
+    module_count = await db.modules.count_documents({})
+    if module_count == 0:
+        modules, lessons, questions, exams, exam_questions = get_course_data()
+        if modules:
+            await db.modules.insert_many(modules)
+        if lessons:
+            await db.lessons.insert_many(lessons)
+        if questions:
+            await db.questions.insert_many(questions)
+        if exams:
+            await db.exams.insert_many(exams)
+        if exam_questions:
+            await db.exam_questions.insert_many(exam_questions)
+        logger.info("Course data seeded successfully!")
+    # Write test credentials
+    memory_dir = pathlib.Path("/app/memory")
+    memory_dir.mkdir(exist_ok=True)
+    with open("/app/memory/test_credentials.md", "w") as f:
+        f.write(f"# Test Credentials\n\n")
+        f.write(f"## Admin\n- Email: {admin_email}\n- Password: {admin_password}\n- Role: admin\n\n")
+        f.write(f"## Test User\n- Register with any email/password (min 6 chars)\n\n")
+        f.write(f"## Auth Endpoints\n- POST /api/auth/register\n- POST /api/auth/login\n- GET /api/auth/me\n\n")
+        f.write(f"## PayPal Link\n- {PAYPAL_LINK}\n")
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
