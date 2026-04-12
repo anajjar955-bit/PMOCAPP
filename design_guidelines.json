@@ -1,0 +1,113 @@
+{
+  "theme_archetype": {
+    "theme": "Light",
+    "archetype": "4 (Swiss & High-Contrast)",
+    "description": "A clean, functional, mobile-first design optimized for exam preparation. Emphasizes clarity, focus, and structure with PM House's brand colors (Orange & Blue)."
+  },
+  "typography": {
+    "strategy": "The 'Soft Utility' - clear, accessible, and legible for dense learning material.",
+    "fonts": {
+      "heading": "Tajawal, sans-serif",
+      "body": "Tajawal, Inter, sans-serif"
+    },
+    "hierarchy": {
+      "h1": "text-3xl sm:text-4xl font-bold tracking-tight text-slate-900",
+      "h2": "text-2xl sm:text-3xl font-bold tracking-tight text-slate-900",
+      "h3": "text-xl font-semibold text-slate-800",
+      "h4": "text-lg font-medium text-slate-800",
+      "body": "text-base leading-relaxed text-slate-600",
+      "small": "text-sm text-slate-500 uppercase tracking-wider"
+    }
+  },
+  "color_palette": {
+    "primary": {
+      "blue": "#1D4ED8",
+      "blue_hover": "#1E40AF",
+      "blue_light": "#DBEAFE"
+    },
+    "accent": {
+      "orange": "#EA580C",
+      "orange_hover": "#C2410C",
+      "orange_light": "#FFEDD5"
+    },
+    "background": {
+      "page": "#F8FAFC",
+      "surface": "#FFFFFF",
+      "surface_glass": "rgba(255, 255, 255, 0.85)"
+    },
+    "text": {
+      "primary": "#0F172A",
+      "secondary": "#475569",
+      "muted": "#94A3B8"
+    },
+    "status": {
+      "success": "#16A34A",
+      "error": "#DC2626",
+      "warning": "#D97706"
+    }
+  },
+  "layout_spacing": {
+    "strategy": "Mobile-first RTL layout. Uses logical properties for spacing (ps-, pe-, ms-, me-) to ensure flawless Arabic RTL support.",
+    "container": "w-full max-w-md mx-auto min-h-screen bg-slate-50 shadow-2xl relative overflow-x-hidden",
+    "padding": "p-4 sm:p-6",
+    "bento_grid": "grid grid-cols-2 gap-4",
+    "borderRadius": {
+      "card": "rounded-2xl",
+      "button": "rounded-xl",
+      "input": "rounded-lg"
+    }
+  },
+  "components": {
+    "buttons": "High contrast, full-width on mobile. Primary action uses Brand Blue. Purchase/Urgent actions use Brand Orange.",
+    "cards": "White surface, 1px border-slate-200, shadow-sm. Active/Selected state gets ring-2 ring-blue-500.",
+    "navigation": "Bottom fixed navigation bar with 4 tabs: Home, Course, Exams, Profile. Glassmorphism backdrop-blur-md.",
+    "quiz_interface": "Scenario question text is text-lg font-medium. Options are stacked vertically as cards. Selected option turns blue-light with blue border. Correct/Incorrect reveals after submission.",
+    "video_player": "16:9 aspect ratio, sticky at the top on scroll, rounded-b-2xl for immersive feel."
+  },
+  "motion_interaction": {
+    "hover": "Subtle scale-up for cards (hover:scale-[1.02]), opacity transitions for buttons.",
+    "page_transition": "Slide in from left/right (RTL aware).",
+    "quiz_feedback": "Shake animation on wrong answer, gentle pulse on correct answer."
+  },
+  "icons_assets": {
+    "library": "lucide-react",
+    "rules": "Directional icons (arrows, chevrons) MUST use rtl:rotate-180 to flip in Arabic layout.",
+    "image_urls": [
+      {
+        "url": "https://images.unsplash.com/photo-1758874385949-cec80d549f67?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjY2NzN8MHwxfHNlYXJjaHwzfHxwcm9qZWN0JTIwbWFuYWdlbWVudCUyMHN0dWR5aW5nJTIwbW9kZXJuJTIwb2ZmaWNlfGVufDB8fHx8MTc3NTk2NzY0Nnww&ixlib=rb-4.1.0&q=85",
+        "category": "hero",
+        "description": "Man studying at desk. Use for the main onboarding or pre-payment demo screen."
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1774289123151-c23fd9b8115a?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA2OTV8MHwxfHNlYXJjaHwxfHxoZXhhZ29uJTIwZ2VvbWV0cmljJTIwYWJzdHJhY3QlMjBibHVlJTIwb3JhbmdlfGVufDB8fHx8MTc3NTk2NzY2MHww&ixlib=rb-4.1.0&q=85",
+        "category": "background",
+        "description": "Hexagon abstract background. Use as header background for Course and Exam modules to reinforce the brand identity."
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1755540735876-ff503cf594fe?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxOTJ8MHwxfHNlYXJjaHwxfHxjZXJ0aWZpY2F0ZSUyMGFjaGlldmVtZW50JTIwYmxhbmt8ZW58MHx8fHwxNzc1OTY3NjYxfDA&ixlib=rb-4.1.0&q=85",
+        "category": "certificate",
+        "description": "Blank ornate certificate background. Overlay dynamically generated text (Name, Date, PM House Logo) on this image for the Certificate of Achievement."
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1758611974982-ca55f12b3378?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NDh8MHwxfHNlYXJjaHwxfHxsZWFybmluZyUyMHN0dWR5aW5nJTIwYXBwJTIwbW9iaWxlJTIwcGhvbmV8ZW58MHx8fHwxNzc1OTY3NjYwfDA&ixlib=rb-4.1.0&q=85",
+        "category": "course_thumbnail",
+        "description": "Woman using mobile phone for learning. Use for video lesson placeholders or course thumbnails."
+      }
+    ]
+  },
+  "accessibility": {
+    "rtl_compliance": "Must set dir='rtl' on html or root div. Use logical properties like ps-, me-, start-, end- instead of pl-, mr-, left-, right-.",
+    "contrast": "All text must pass WCAG AA minimum 4.5:1 ratio.",
+    "testing": "All interactive elements MUST include data-testid attribute in kebab-case."
+  },
+  "instructions_to_main_agent": [
+    "Build this as a mobile-first web app using React JS + Tailwind. Wrap the main app container in 'max-w-md mx-auto min-h-screen bg-slate-50 relative' to simulate a mobile app interface on web.",
+    "CRITICAL: The content is Arabic. Implement full RTL layout using Tailwind logical properties. Add dir='rtl' to the root.",
+    "Logo: Use lucide-react 'Hexagon' icon styled with brand colors (Blue and Orange) + text 'PM HOUSE' since custom image generation failed.",
+    "Include a Bottom Navigation Bar fixed to the bottom of the screen.",
+    "Use standard Shadcn components but heavily customize them to remove borders and make them feel mobile-native.",
+    "For the PayPal integration, implement an external link button that redirects the user.",
+    "For the Certificate, use the provided certificate background URL and absolutely position the user's name and achievement details over it.",
+    "Ensure all UI labels, placeholders, and static texts are in Arabic."
+  ]
+}
