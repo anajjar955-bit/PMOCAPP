@@ -418,7 +418,7 @@ async def get_progress(request: Request):
 @api_router.get("/audio/slide/{lesson_id}/{slide_index}")
 async def get_slide_audio(lesson_id: str, slide_index: int, request: Request):
     """Generate TTS audio with ElevenLabs Egyptian Arabic voice"""
-    cache_key = f"{lesson_id}_{slide_index}_akv9"
+    cache_key = f"{lesson_id}_{slide_index}_akv10"
     cached = await db.audio_cache.find_one({"cache_key": cache_key}, {"_id": 0})
     if cached and cached.get("audio_base64"):
         audio_bytes = base64.b64decode(cached["audio_base64"])
@@ -438,7 +438,7 @@ async def get_slide_audio(lesson_id: str, slide_index: int, request: Request):
     if key_points:
         slide_content += "نقاط: " + " / ".join(key_points)
 
-    # Step 1: Generate natural Egyptian Arabic narration (NO tashkeel) using GPT
+    # Step 1: Generate professional Egyptian Arabic narration using GPT
     try:
         from emergentintegrations.llm.openai import LlmChat, UserMessage
         import hashlib
@@ -446,24 +446,26 @@ async def get_slide_audio(lesson_id: str, slide_index: int, request: Request):
         chat = LlmChat(
             api_key=os.getenv("EMERGENT_LLM_KEY"),
             session_id=sid,
-            system_message="انت مدرب مصري محترف في ادارة المشاريع. بتشرح بالعامية المصرية السلسة."
+            system_message="انت محاضر مصري محترف ومتمكن في ادارة المشاريع. اسلوبك جذاب وحماسي وبتوصل المعلومة ببساطة. بتشرح بالعامية المصرية."
         )
         chat = chat.with_model("openai", "gpt-4o-mini")
-        prompt = f"""اكتب سكريبت صوتي لشرح المحتوى التالي:
+        prompt = f"""اكتب سكريبت محاضرة احترافية لشرح المحتوى ده:
 
 {slide_content}
 
-القواعد المهمة جدا:
-1. اكتب بالعامية المصرية البسيطة
-2. بدون اي تشكيل نهائي على اي كلمة
-3. ممنوع: آه، ييه، هاا، اوه، ممم، اي اصوات تعبيرية
-4. ممنوع: تكرار اي كلمة مرتين ورا بعض
-5. ابدأ مباشرة بالموضوع
-6. جمل قصيرة جدا. كل جملة خمس الى عشر كلمات فقط
-7. اكتب الارقام بالحروف: خمسين بدل 50
-8. بدون اختصارات انجليزية
-9. الطول: خمسين الى سبعين كلمة فقط
-10. نص متصل بدون عناوين او نقاط"""
+القواعد:
+1. اشرح بالعامية المصرية كمحاضر محترف ومصحصح وجذاب
+2. بدون اي تشكيل على اي كلمة
+3. ممنوع اصوات تعبيرية: آه، ييه، هاا، اوه، ممم
+4. ممنوع تكرار اي كلمة مرتين ورا بعض
+5. ابدأ مباشرة بسؤال او حقيقة مثيرة تلفت الانتباه
+6. استخدم عبارات محاضر محترف زي: تخيلوا معايا، لاحظوا كده، السؤال المهم هنا، الحكاية ببساطة، يعني ايه الكلام ده عمليا
+7. ادي مثال عملي من الواقع لو ممكن
+8. اختم بخلاصة قوية ومحفزة
+9. جمل قصيرة وواضحة
+10. اكتب الارقام بالحروف
+11. الطول: ستين الى ثمانين كلمة
+12. نص متصل بدون عناوين او نقاط"""
 
         narration = await chat.send_message(UserMessage(text=prompt))
         narration = narration.strip()[:4096]
@@ -528,7 +530,7 @@ async def get_slide_subtitle(lesson_id: str, slide_index: int, lang: str = "ar")
     if lang == "en":
         cache_key = f"{lesson_id}_{slide_index}_en"
     else:
-        cache_key = f"{lesson_id}_{slide_index}_akv9"
+        cache_key = f"{lesson_id}_{slide_index}_akv10"
     cached = await db.audio_cache.find_one({"cache_key": cache_key}, {"_id": 0, "narration_text": 1})
     if cached and cached.get("narration_text"):
         return {"text": cached["narration_text"]}
