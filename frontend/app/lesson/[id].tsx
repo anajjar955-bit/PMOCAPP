@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, ScrollView, Animated } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useAuth, useLang } from '../_layout';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -259,12 +259,20 @@ export default function LessonViewer() {
         </View>
       </View>
 
-      {/* Arabic Translation Subtitle - only in English mode */}
-      {lang === 'en' && (audioPlaying || audioLoading) && (
-        <View style={styles.arSubtitleBar}>
-          <ScrollView style={styles.arSubtitleScroll} nestedScrollEnabled showsVerticalScrollIndicator={false}>
-            <Text style={styles.arSubtitleTitle}>{arTitle}</Text>
-            <Text style={styles.arSubtitleText}>{arContent}</Text>
+      {/* Arabic Translation Marquee - only in English mode */}
+      {lang === 'en' && (
+        <View style={styles.arMarqueeBar}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} ref={(ref) => {
+            if (ref && audioPlaying) {
+              const scrollAnim = () => {
+                ref.scrollToEnd({ animated: true });
+              };
+              setTimeout(scrollAnim, 500);
+            }
+          }}>
+            <Text style={styles.arMarqueeText}>
+              {arTitle} — {arContent}{arKeyPoints.length > 0 ? ' ◆ ' + arKeyPoints.join(' ◆ ') : ''}
+            </Text>
           </ScrollView>
         </View>
       )}
@@ -344,10 +352,8 @@ const styles = StyleSheet.create({
   speedBtnText: { fontSize: 13, fontWeight: '700', color: '#fff' },
   audioProgressBg: { height: 3, backgroundColor: 'rgba(255,255,255,0.2)' },
   audioProgressFill: { height: 3, backgroundColor: '#D4A843' },
-  arSubtitleBar: { marginHorizontal: 16, marginTop: 4, backgroundColor: 'rgba(27,54,93,0.08)', borderRadius: 8, padding: 10, maxHeight: 70, borderWidth: 1, borderColor: 'rgba(27,54,93,0.15)' },
-  arSubtitleScroll: { flex: 1 },
-  arSubtitleTitle: { fontSize: 13, fontWeight: '700', color: '#1B365D', textAlign: 'right', marginBottom: 4, writingDirection: 'rtl' },
-  arSubtitleText: { fontSize: 12, color: '#475569', textAlign: 'right', lineHeight: 20, writingDirection: 'rtl' },
+  arMarqueeBar: { marginHorizontal: 16, marginTop: 4, backgroundColor: 'rgba(27,54,93,0.06)', borderRadius: 6, paddingVertical: 6, paddingHorizontal: 8, height: 30, justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(27,54,93,0.1)' },
+  arMarqueeText: { fontSize: 13, color: '#1B365D', fontWeight: '500', writingDirection: 'rtl', textAlign: 'right', lineHeight: 18 },
   dots: { justifyContent: 'center', gap: 8, paddingVertical: 8 },
   dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#D0D0CC' },
   dotActive: { backgroundColor: '#1B365D', width: 24 },

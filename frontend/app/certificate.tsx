@@ -94,7 +94,7 @@ body { font-family: 'Inter', 'Segoe UI', 'Aptos', Arial, sans-serif; background:
     <div class="cert-title">Certificate of Achievement</div>
     <div class="granted-text">Is Hereby Granted To</div>
     <div class="recipient-name">${certificate.name}</div>
-    <div class="completing-text">For Completing the Following Course</div>
+    <div class="completing-text">For Completing the Following Course in 3 Hours</div>
     <div class="course-name">${certificate.course_name}</div>
     <div class="cert-date">${fDate}</div>
   </div>
@@ -192,7 +192,7 @@ body { font-family: 'Inter', 'Segoe UI', 'Aptos', Arial, sans-serif; background:
                 <Text style={s.certTitle}>CERTIFICATE OF ACHIEVEMENT</Text>
                 <Text style={s.grantedText}>IS HEREBY GRANTED TO</Text>
                 <Text style={s.recipientName}>{certificate?.name}</Text>
-                <Text style={s.completingText}>FOR COMPLETING THE FOLLOWING COURSE</Text>
+                <Text style={s.completingText}>FOR COMPLETING THE FOLLOWING COURSE IN 3 HOURS</Text>
                 <Text style={s.courseName}>{certificate?.course_name}</Text>
                 <Text style={s.certDate}>{fDate}</Text>
               </View>
