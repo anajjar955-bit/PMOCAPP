@@ -418,7 +418,7 @@ async def get_progress(request: Request):
 @api_router.get("/audio/slide/{lesson_id}/{slide_index}")
 async def get_slide_audio(lesson_id: str, slide_index: int, request: Request):
     """Generate TTS audio with ElevenLabs Egyptian Arabic voice"""
-    cache_key = f"{lesson_id}_{slide_index}_akv4"
+    cache_key = f"{lesson_id}_{slide_index}_akv5"
     cached = await db.audio_cache.find_one({"cache_key": cache_key}, {"_id": 0})
     if cached and cached.get("audio_base64"):
         audio_bytes = base64.b64decode(cached["audio_base64"])
@@ -483,9 +483,9 @@ async def get_slide_audio(lesson_id: str, slide_index: int, request: Request):
             voice_id=voice_id,
             model_id="eleven_multilingual_v2",
             voice_settings=VoiceSettings(
-                stability=0.5,
-                similarity_boost=0.8,
-                style=0.4,
+                stability=0.3,
+                similarity_boost=0.75,
+                style=0.6,
                 use_speaker_boost=True
             )
         )
@@ -514,7 +514,7 @@ async def get_slide_subtitle(lesson_id: str, slide_index: int, lang: str = "ar")
     if lang == "en":
         cache_key = f"{lesson_id}_{slide_index}_en"
     else:
-        cache_key = f"{lesson_id}_{slide_index}_akv4"
+        cache_key = f"{lesson_id}_{slide_index}_akv5"
     cached = await db.audio_cache.find_one({"cache_key": cache_key}, {"_id": 0, "narration_text": 1})
     if cached and cached.get("narration_text"):
         return {"text": cached["narration_text"]}
