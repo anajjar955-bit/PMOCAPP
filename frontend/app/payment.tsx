@@ -7,7 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
 const PAYPAL_LINK = "https://www.paypal.com/ncp/payment/QEL5ME5XAAD96";
-const WHATSAPP_NUMBER = "201005394312";
+const WHATSAPP_NUMBER = '201005394312';
 
 export default function Payment() {
   const { user, token, refreshUser } = useAuth();

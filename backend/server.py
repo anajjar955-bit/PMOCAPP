@@ -25,7 +25,7 @@ db = client[os.environ.get('DB_NAME', 'pmhouse_academy')]
 
 JWT_SECRET = os.environ.get('JWT_SECRET', secrets.token_hex(32))
 JWT_ALGORITHM = "HS256"
-PAYPAL_LINK = "https://www.paypal.com/ncp/payment/QEL5ME5XAAD96"
+PAYPAL_LINK = os.environ.get('PAYPAL_LINK', 'https://www.paypal.com/ncp/payment/QEL5ME5XAAD96')
 
 app = FastAPI()
 api_router = APIRouter(prefix="/api")
@@ -654,7 +654,7 @@ async def export_users_excel(request: Request):
     )
 
 # ========== Payment Routes ==========
-WHATSAPP_NUMBER = "201005394312"
+WHATSAPP_NUMBER = os.environ.get('WHATSAPP_NUMBER', '201005394312')
 
 @api_router.get("/payment/info")
 async def get_payment_info():
