@@ -334,11 +334,11 @@ async def get_progress(request: Request):
         "is_course_complete": completed >= total_lessons
     }
 
-# ========== Audio TTS Routes ==========
+# ========== Audio TTS Routes (ElevenLabs) ==========
 @api_router.get("/audio/slide/{lesson_id}/{slide_index}")
 async def get_slide_audio(lesson_id: str, slide_index: int, request: Request):
-    """Generate TTS audio with Egyptian Arabic narration and vocal modulation"""
-    cache_key = f"{lesson_id}_{slide_index}_v3"
+    """Generate TTS audio with ElevenLabs Egyptian Arabic voice"""
+    cache_key = f"{lesson_id}_{slide_index}_el1"
     cached = await db.audio_cache.find_one({"cache_key": cache_key}, {"_id": 0})
     if cached and cached.get("audio_base64"):
         audio_bytes = base64.b64decode(cached["audio_base64"])
@@ -353,112 +353,138 @@ async def get_slide_audio(lesson_id: str, slide_index: int, request: Request):
         raise HTTPException(status_code=404, detail="Slide not found")
 
     slide = slides[slide_index]
-    slide_content = f"عنوان الشريحة: {slide['title']}\nالمحتوى: {slide.get('content', '')}\n"
+    slide_content = f"عنوان: {slide['title']}\nمحتوى: {slide.get('content', '')}\n"
     key_points = slide.get('key_points', [])
     if key_points:
-        slide_content += "النقاط الرئيسية:\n" + "\n".join(f"- {p}" for p in key_points)
+        slide_content += "نقاط: " + " / ".join(key_points)
 
-    # Step 1: Generate narration with 3 segments for vocal variety
+    # Step 1: Generate Egyptian Arabic narration using GPT
     try:
         from emergentintegrations.llm.openai import LlmChat, UserMessage
         import hashlib
-        sid = f"nar_{hashlib.md5(cache_key.encode()).hexdigest()[:8]}"
+        sid = f"el_{hashlib.md5(cache_key.encode()).hexdigest()[:8]}"
         chat = LlmChat(
             api_key=os.getenv("EMERGENT_LLM_KEY"),
             session_id=sid,
-            system_message="أنت مدرب مصري اسمه أحمد متخصص في إدارة المشاريع. بتشرح بالعامية المصرية. لازم تكتب الكلام بالعامية المصرية الصح مش فصحى."
+            system_message="أنت مدرب مصري متخصص في إدارة المشاريع. بتشرح بالعامية المصرية الطبيعية زي ما بتتكلم مع صحابك."
         )
         chat = chat.with_model("openai", "gpt-4o-mini")
+        prompt = f"""اشرح المحتوى ده كأنك مدرب مصري بتشرح في فيديو:
 
-        prompt = f"""اكتب شرح للمحتوى التالي كأنك مدرب مصري في فيديو تدريبي. 
-
-المحتوى:
 {slide_content}
 
-اكتب الشرح مقسم لـ 3 أجزاء منفصلة بعلامة ||| بين كل جزء:
-
-الجزء 1 (مقدمة حماسية - 30 كلمة): ابدأ بحماس عالي! استخدم عبارات زي "أهلاً بيكم يا جماعة!"، "تعالوا نتكلم عن حاجة مهمة جداً!"، "النهارده هنفهم مع بعض..."
-
-|||
-
-الجزء 2 (شرح هادي ومفصل - 60 كلمة): اشرح المحتوى بهدوء وتركيز. استخدم "يعني ببساطة كده..."، "خلوني أقولكم..."، "الفكرة إن..."، اشرح بأمثلة من الواقع.
-
-|||
-
-الجزء 3 (ملخص ونقاط مهمة - 40 كلمة): لخص بحماس متوسط. "يبقى الخلاصة..."، "أهم حاجة تفتكروها..."، "كده فهمنا إن..."
-
-قواعد مهمة:
-- اكتب بالعامية المصرية 100% - مش فصحى!  
-- استخدم كلمات زي: دلوقتي، كده، عشان، ليه، إزاي، يعني، بتاع، حاجة
-- اكتب كلام متصل بدون نقاط أو ترقيم
-- لا تكتب أرقام أو مصطلحات إنجليزية - اكتبها بالعربي"""
+اكتب شرح بالعامية المصرية الطبيعية في حدود 100-130 كلمة.
+- ابدأ بمقدمة حماسية قصيرة
+- اشرح بهدوء مع أمثلة من الواقع
+- اختم بخلاصة سريعة
+- استخدم كلمات مصرية: دلوقتي، كده، عشان، يعني، بتاع، حاجة، إزاي، ليه
+- اكتب كلام متصل بدون عناوين أو نقاط
+- خلي الكلام طبيعي زي حد بيتكلم مش بيقرأ"""
 
         narration = await chat.send_message(UserMessage(text=prompt))
-        segments = [s.strip() for s in narration.split("|||") if s.strip()]
-        logger.info(f"Generated {len(segments)} segments for {cache_key}")
+        narration = narration.strip()[:4096]
+        logger.info(f"Narration for {cache_key}: {narration[:80]}...")
     except Exception as e:
         logger.error(f"GPT narration failed: {e}")
-        text = f"{slide['title']}. {slide.get('content', '')}."
-        if key_points:
-            text += " " + "، ".join(key_points)
-        segments = [text[:4096]]
+        narration = f"{slide['title']}. {slide.get('content', '')}."
 
-    # Step 2: Generate audio for each segment with different speeds
-    from emergentintegrations.llm.openai import OpenAITextToSpeech
-    tts = OpenAITextToSpeech(api_key=os.getenv("EMERGENT_LLM_KEY"))
-    speeds = [1.15, 0.95, 1.05]  # Fast intro, slow middle, medium outro
-    voices = ["coral", "coral", "coral"]  # coral = warm and friendly
-
+    # Step 2: Generate audio using ElevenLabs with Egyptian voice
     try:
-        audio_parts = []
-        for i, seg in enumerate(segments[:3]):
-            if not seg:
-                continue
-            spd = speeds[i] if i < len(speeds) else 1.0
-            audio_bytes = await tts.generate_speech(
-                text=seg[:4096],
-                model="tts-1-hd",
-                voice=voices[i] if i < len(voices) else "coral",
-                speed=spd,
-                response_format="mp3"
+        from elevenlabs import ElevenLabs as ElevenLabsClient
+        from elevenlabs.types import VoiceSettings
+        el_client = ElevenLabsClient(api_key=os.getenv("ELEVENLABS_API_KEY"))
+        voice_id = os.getenv("ELEVENLABS_VOICE_ID", "rMheqEfwsIJckq2yCdb5")
+
+        audio_gen = el_client.text_to_speech.convert(
+            text=narration,
+            voice_id=voice_id,
+            model_id="eleven_multilingual_v2",
+            voice_settings=VoiceSettings(
+                stability=0.35,
+                similarity_boost=0.85,
+                style=0.7,
+                use_speaker_boost=True
             )
-            audio_parts.append(audio_bytes)
-
-        # Combine audio segments with pydub for smooth transitions
-        import io
-        from pydub import AudioSegment
-
-        combined = AudioSegment.empty()
-        pause = AudioSegment.silent(duration=400)  # 400ms pause between segments
-
-        for i, part_bytes in enumerate(audio_parts):
-            segment = AudioSegment.from_mp3(io.BytesIO(part_bytes))
-            # Vary volume slightly: intro louder, middle normal, outro medium
-            if i == 0:
-                segment = segment + 2  # +2dB louder for intro
-            elif i == 1:
-                segment = segment - 1  # slightly softer for detailed explanation
-            combined += segment + pause
-
-        # Export final audio
-        output = io.BytesIO()
-        combined.export(output, format="mp3", bitrate="128k")
-        final_audio = output.getvalue()
+        )
+        audio_data = b""
+        for chunk in audio_gen:
+            audio_data += chunk
 
         # Cache
-        audio_b64 = base64.b64encode(final_audio).decode("utf-8")
+        audio_b64 = base64.b64encode(audio_data).decode("utf-8")
         await db.audio_cache.update_one(
             {"cache_key": cache_key},
             {"$set": {"cache_key": cache_key, "audio_base64": audio_b64,
-                      "narration_text": "|||".join(segments),
+                      "narration_text": narration,
                       "created_at": datetime.now(timezone.utc).isoformat()}},
             upsert=True
         )
-        return Response(content=final_audio, media_type="audio/mp3",
+        return Response(content=audio_data, media_type="audio/mp3",
                        headers={"Cache-Control": "public, max-age=86400"})
     except Exception as e:
-        logger.error(f"TTS generation failed: {e}")
+        logger.error(f"ElevenLabs TTS failed: {e}")
         raise HTTPException(status_code=500, detail=f"فشل توليد الصوت: {str(e)}")
+
+# ========== Activation Code System ==========
+import random, string
+
+def generate_activation_code():
+    chars = string.ascii_uppercase + string.digits
+    part1 = ''.join(random.choices(chars, k=4))
+    part2 = ''.join(random.choices(chars, k=4))
+    return f"PMH-{part1}-{part2}"
+
+@api_router.post("/admin/generate-code")
+async def generate_code(request: Request):
+    """Admin generates an activation code"""
+    user = await get_current_user(request)
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    body = await request.json()
+    email = body.get("email", "").lower().strip()
+    code = generate_activation_code()
+    await db.activation_codes.update_one(
+        {"email": email},
+        {"$set": {
+            "email": email,
+            "code": code,
+            "used": False,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "created_by": user["id"]
+        }},
+        upsert=True
+    )
+    return {"code": code, "email": email}
+
+@api_router.post("/activate")
+async def activate_with_code(request: Request):
+    """User enters activation code to unlock full access"""
+    user = await get_current_user(request)
+    body = await request.json()
+    code = body.get("code", "").strip().upper()
+    if not code:
+        raise HTTPException(status_code=400, detail="يرجى إدخال كود التفعيل")
+    record = await db.activation_codes.find_one({"code": code, "used": False}, {"_id": 0})
+    if not record:
+        raise HTTPException(status_code=400, detail="كود التفعيل غير صحيح أو مستخدم مسبقاً")
+    await db.activation_codes.update_one(
+        {"code": code},
+        {"$set": {"used": True, "used_by": user["id"], "used_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    await db.users.update_one(
+        {"_id": ObjectId(user["id"])},
+        {"$set": {"is_paid": True, "payment_date": datetime.now(timezone.utc).isoformat(), "activation_code": code}}
+    )
+    return {"success": True, "message": "تم تفعيل اشتراكك بنجاح! 🎉"}
+
+@api_router.get("/admin/codes")
+async def list_codes(request: Request):
+    """Admin lists all activation codes"""
+    user = await get_current_user(request)
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    codes = await db.activation_codes.find({}, {"_id": 0}).sort("created_at", -1).to_list(100)
+    return {"codes": codes}
 
 # ========== Payment Routes ==========
 WHATSAPP_NUMBER = "201005394312"
