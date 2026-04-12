@@ -8,6 +8,40 @@ import { Audio } from 'expo-av';
 
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
 
+// Marquee component - scrolls text synced with audio progress
+function MarqueeText({ text, playing, progress }: { text: string; playing: boolean; progress: number }) {
+  const scrollRef = useRef<ScrollView>(null);
+  const textWidthRef = useRef(0);
+  const containerWidthRef = useRef(0);
+
+  useEffect(() => {
+    if (scrollRef.current && playing && textWidthRef.current > containerWidthRef.current) {
+      const maxScroll = textWidthRef.current - containerWidthRef.current;
+      const scrollTo = maxScroll * progress;
+      scrollRef.current.scrollTo({ x: scrollTo, animated: true });
+    }
+  }, [progress, playing]);
+
+  return (
+    <View style={styles.arMarqueeBar}
+      onLayout={(e) => { containerWidthRef.current = e.nativeEvent.layout.width; }}>
+      <ScrollView
+        ref={scrollRef}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        scrollEnabled={false}
+      >
+        <Text
+          style={styles.arMarqueeText}
+          onLayout={(e) => { textWidthRef.current = e.nativeEvent.layout.width; }}
+        >
+          {text}
+        </Text>
+      </ScrollView>
+    </View>
+  );
+}
+
 export default function LessonViewer() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { token } = useAuth();
@@ -261,20 +295,11 @@ export default function LessonViewer() {
 
       {/* Arabic Translation Marquee - only in English mode */}
       {lang === 'en' && (
-        <View style={styles.arMarqueeBar}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} ref={(ref) => {
-            if (ref && audioPlaying) {
-              const scrollAnim = () => {
-                ref.scrollToEnd({ animated: true });
-              };
-              setTimeout(scrollAnim, 500);
-            }
-          }}>
-            <Text style={styles.arMarqueeText}>
-              {arTitle} — {arContent}{arKeyPoints.length > 0 ? ' ◆ ' + arKeyPoints.join(' ◆ ') : ''}
-            </Text>
-          </ScrollView>
-        </View>
+        <MarqueeText
+          text={`${arTitle} — ${arContent}${arKeyPoints.length > 0 ? ' ◆ ' + arKeyPoints.join(' ◆ ') : ''}`}
+          playing={audioPlaying}
+          progress={audioProgress}
+        />
       )}
 
       <View style={[styles.dots, { flexDirection: rowDir }]}>
