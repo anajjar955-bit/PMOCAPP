@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useAuth } from '../_layout';
+import { useAuth, useLang } from '../_layout';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -14,6 +14,7 @@ const ICON_MAP: Record<string, string> = {
 
 export default function Course() {
   const { token, user } = useAuth();
+  const { lang, t, isRTL } = useLang();
   const router = useRouter();
   const [modules, setModules] = useState<any[]>([]);
   const [selectedModule, setSelectedModule] = useState<string | null>(null);
@@ -50,34 +51,38 @@ export default function Course() {
 
   if (loading) return <View style={styles.loader}><ActivityIndicator size="large" color="#1D4ED8" /></View>;
 
+  const rowDir = isRTL ? 'row-reverse' : 'row';
+  const textAlign = isRTL ? 'right' as const : 'left' as const;
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>محتوى الدورة</Text>
-        <Text style={styles.headerSub}>6 وحدات • 25 درس • 3 ساعات</Text>
+        <Text style={[styles.headerTitle, { textAlign }]}>{t('محتوى الدورة', 'Course Content')}</Text>
+        <Text style={[styles.headerSub, { textAlign }]}>{t('6 وحدات • 25 درس • 3 ساعات', '6 modules • 25 lessons • 3 hours')}</Text>
       </View>
       <ScrollView style={styles.scroll}>
         {modules.map((mod) => {
           const isOpen = selectedModule === mod.id;
           const pct = mod.lesson_count > 0 ? Math.round((mod.completed_lessons / mod.lesson_count) * 100) : 0;
+          const modTitle = lang === 'en' ? (mod.title_en || mod.title) : mod.title;
           return (
             <View key={mod.id}>
               <TouchableOpacity
                 testID={`module-${mod.id}`}
-                style={[styles.moduleCard, isOpen && styles.moduleCardActive]}
+                style={[styles.moduleCard, { flexDirection: rowDir }, isOpen && styles.moduleCardActive]}
                 onPress={() => fetchLessons(mod.id)}
               >
                 <View style={[styles.moduleIcon, { backgroundColor: mod.color + '20' }]}>
                   <Ionicons name={(ICON_MAP[mod.icon] || 'book') as any} size={22} color={mod.color} />
                 </View>
                 <View style={styles.moduleInfo}>
-                  <Text style={styles.moduleTitle}>{mod.title}</Text>
-                  <View style={styles.moduleStats}>
-                    <Text style={styles.moduleStat}>{mod.lesson_count} دروس</Text>
+                  <Text style={[styles.moduleTitle, { textAlign }]}>{modTitle}</Text>
+                  <View style={[styles.moduleStats, { flexDirection: rowDir }]}>
+                    <Text style={styles.moduleStat}>{mod.lesson_count} {t('دروس', 'lessons')}</Text>
                     <Text style={styles.moduleStat}>•</Text>
-                    <Text style={styles.moduleStat}>{mod.exam_weight}% من الاختبار</Text>
+                    <Text style={styles.moduleStat}>{mod.exam_weight}% {t('من الاختبار', 'of exam')}</Text>
                     <Text style={styles.moduleStat}>•</Text>
-                    <Text style={styles.moduleStat}>{mod.duration_minutes} دقيقة</Text>
+                    <Text style={styles.moduleStat}>{mod.duration_minutes} {t('دقيقة', 'min')}</Text>
                   </View>
                   {pct > 0 && (
                     <View style={styles.miniProgressBg}>
@@ -92,50 +97,53 @@ export default function Course() {
                 <View style={styles.lessonsContainer}>
                   {lessonsLoading ? (
                     <ActivityIndicator style={{ padding: 16 }} color="#1D4ED8" />
-                  ) : lessons.map((lesson, idx) => (
-                    <TouchableOpacity
-                      key={lesson.id}
-                      testID={`lesson-${lesson.id}`}
-                      style={styles.lessonRow}
-                      onPress={() => {
-                        if (lesson.is_accessible) router.push(`/lesson/${lesson.id}`);
-                        else router.push('/payment');
-                      }}
-                    >
-                      <View style={styles.lessonLeft}>
-                        <View style={[
-                          styles.lessonNumber,
-                          lesson.is_completed && styles.lessonNumberDone,
-                          !lesson.is_accessible && styles.lessonNumberLocked
-                        ]}>
-                          {lesson.is_completed ? (
-                            <Ionicons name="checkmark" size={14} color="#fff" />
-                          ) : !lesson.is_accessible ? (
-                            <Ionicons name="lock-closed" size={12} color="#94A3B8" />
-                          ) : (
-                            <Text style={styles.lessonNumText}>{idx + 1}</Text>
-                          )}
-                        </View>
-                        <View style={styles.lessonInfo}>
-                          <Text style={[styles.lessonTitle, !lesson.is_accessible && styles.lessonLocked]}>
-                            {lesson.title}
-                          </Text>
-                          <View style={styles.lessonMeta}>
-                            <Text style={styles.lessonDuration}>{lesson.duration_minutes} دقائق</Text>
-                            {lesson.is_demo && <View style={styles.demoBadge}><Text style={styles.demoText}>مجاني</Text></View>}
-                            {lesson.quiz_score != null && (
-                              <View style={[styles.quizBadge, { backgroundColor: lesson.quiz_score >= 65 ? '#DCFCE7' : '#FEE2E2' }]}>
-                                <Text style={{ fontSize: 11, color: lesson.quiz_score >= 65 ? '#16A34A' : '#DC2626', fontWeight: '600' }}>
-                                  اختبار: {lesson.quiz_score}%
-                                </Text>
-                              </View>
+                  ) : lessons.map((lesson, idx) => {
+                    const lessonTitle = lang === 'en' ? (lesson.title_en || lesson.title) : lesson.title;
+                    return (
+                      <TouchableOpacity
+                        key={lesson.id}
+                        testID={`lesson-${lesson.id}`}
+                        style={[styles.lessonRow, { flexDirection: rowDir }]}
+                        onPress={() => {
+                          if (lesson.is_accessible) router.push(`/lesson/${lesson.id}`);
+                          else router.push('/payment');
+                        }}
+                      >
+                        <View style={[styles.lessonLeft, { flexDirection: rowDir }]}>
+                          <View style={[
+                            styles.lessonNumber,
+                            lesson.is_completed && styles.lessonNumberDone,
+                            !lesson.is_accessible && styles.lessonNumberLocked
+                          ]}>
+                            {lesson.is_completed ? (
+                              <Ionicons name="checkmark" size={14} color="#fff" />
+                            ) : !lesson.is_accessible ? (
+                              <Ionicons name="lock-closed" size={12} color="#94A3B8" />
+                            ) : (
+                              <Text style={styles.lessonNumText}>{idx + 1}</Text>
                             )}
                           </View>
+                          <View style={styles.lessonInfo}>
+                            <Text style={[styles.lessonTitle, { textAlign }, !lesson.is_accessible && styles.lessonLocked]}>
+                              {lessonTitle}
+                            </Text>
+                            <View style={[styles.lessonMeta, { flexDirection: rowDir }]}>
+                              <Text style={styles.lessonDuration}>{lesson.duration_minutes} {t('دقائق', 'min')}</Text>
+                              {lesson.is_demo && <View style={styles.demoBadge}><Text style={styles.demoText}>{t('مجاني', 'Free')}</Text></View>}
+                              {lesson.quiz_score != null && (
+                                <View style={[styles.quizBadge, { backgroundColor: lesson.quiz_score >= 65 ? '#DCFCE7' : '#FEE2E2' }]}>
+                                  <Text style={{ fontSize: 11, color: lesson.quiz_score >= 65 ? '#16A34A' : '#DC2626', fontWeight: '600' }}>
+                                    {t('اختبار', 'Quiz')}: {lesson.quiz_score}%
+                                  </Text>
+                                </View>
+                              )}
+                            </View>
+                          </View>
                         </View>
-                      </View>
-                      <Ionicons name="arrow-back" size={16} color="#94A3B8" />
-                    </TouchableOpacity>
-                  ))}
+                        <Ionicons name={isRTL ? "arrow-back" : "arrow-forward"} size={16} color="#94A3B8" />
+                      </TouchableOpacity>
+                    );
+                  })}
                 </View>
               )}
             </View>

@@ -1,15 +1,25 @@
 import { useEffect, useState, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useAuth } from '../_layout';
+import { useAuth, useLang } from '../_layout';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
 
+function createShuffleMap(length: number): number[] {
+  const indices = Array.from({ length }, (_, i) => i);
+  for (let i = indices.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [indices[i], indices[j]] = [indices[j], indices[i]];
+  }
+  return indices;
+}
+
 export default function ExamScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { token } = useAuth();
+  const { lang, t, isRTL } = useLang();
   const router = useRouter();
   const [exam, setExam] = useState<any>(null);
   const [questions, setQuestions] = useState<any[]>([]);
@@ -20,6 +30,7 @@ export default function ExamScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [timeLeft, setTimeLeft] = useState(0);
   const timerRef = useRef<any>(null);
+  const [shuffleMaps, setShuffleMaps] = useState<Record<string, number[]>>({});
 
   useEffect(() => { fetchExam(); return () => clearInterval(timerRef.current); }, [id]);
 
@@ -45,6 +56,12 @@ export default function ExamScreen() {
         setExam(data.exam);
         setQuestions(data.questions || []);
         setTimeLeft((data.exam?.time_limit_minutes || 40) * 60);
+        // Create shuffle maps for each question
+        const maps: Record<string, number[]> = {};
+        (data.questions || []).forEach((q: any) => {
+          maps[q.id] = createShuffleMap(q.options?.length || 0);
+        });
+        setShuffleMaps(maps);
       }
     } catch (e) { console.log(e); }
     setLoading(false);
@@ -152,17 +169,29 @@ export default function ExamScreen() {
       </View>
 
       <ScrollView style={styles.scroll} contentContainerStyle={{ padding: 20 }}>
-        <Text style={styles.questionText}>{q.scenario}</Text>
-        {q.options.map((opt: string, i: number) => (
-          <TouchableOpacity key={i} testID={`exam-option-${i}`}
-            style={[styles.optionCard, answers[q.id] === i && styles.optionSelected]}
-            onPress={() => setAnswers(prev => ({ ...prev, [q.id]: i }))}>
-            <View style={[styles.optionCircle, answers[q.id] === i && styles.optionCircleSel]}>
-              {answers[q.id] === i ? <Ionicons name="checkmark" size={14} color="#fff" /> : <Text style={styles.optLetter}>{String.fromCharCode(65 + i)}</Text>}
-            </View>
-            <Text style={[styles.optionText, answers[q.id] === i && { color: '#1D4ED8', fontWeight: '600' }]}>{opt}</Text>
-          </TouchableOpacity>
-        ))}
+        <Text style={[styles.questionText, { textAlign: isRTL ? 'right' : 'left' }]}>
+          {lang === 'en' ? (q.scenario_en || q.scenario) : q.scenario}
+        </Text>
+        {(() => {
+          const map = shuffleMaps[q.id] || [];
+          const opts = lang === 'en' ? (q.options_en || q.options) : q.options;
+          const shuffledOpts = map.length > 0 ? map.map((i: number) => opts[i]) : opts;
+          const selectedOriginal = answers[q.id];
+          const selectedShuffled = selectedOriginal !== undefined && map.length > 0 ? map.indexOf(selectedOriginal) : selectedOriginal;
+          return shuffledOpts.map((opt: string, i: number) => {
+            const originalIdx = map.length > 0 ? map[i] : i;
+            return (
+              <TouchableOpacity key={i} testID={`exam-option-${i}`}
+                style={[styles.optionCard, { flexDirection: isRTL ? 'row-reverse' : 'row' }, selectedShuffled === i && styles.optionSelected]}
+                onPress={() => setAnswers(prev => ({ ...prev, [q.id]: originalIdx }))}>
+                <View style={[styles.optionCircle, selectedShuffled === i && styles.optionCircleSel]}>
+                  {selectedShuffled === i ? <Ionicons name="checkmark" size={14} color="#fff" /> : <Text style={styles.optLetter}>{String.fromCharCode(65 + i)}</Text>}
+                </View>
+                <Text style={[styles.optionText, { textAlign: isRTL ? 'right' : 'left' }, selectedShuffled === i && { color: '#1D4ED8', fontWeight: '600' }]}>{opt}</Text>
+              </TouchableOpacity>
+            );
+          });
+        })()}
       </ScrollView>
 
       <View style={styles.bottomNav}>

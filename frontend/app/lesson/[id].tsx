@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, ScrollView } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useAuth } from '../_layout';
+import { useAuth, useLang } from '../_layout';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
@@ -11,6 +11,7 @@ const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
 export default function LessonViewer() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { token } = useAuth();
+  const { lang, t, isRTL } = useLang();
   const router = useRouter();
   const [lesson, setLesson] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -32,6 +33,14 @@ export default function LessonViewer() {
     return () => { isMountedRef.current = false; cleanupAudio(); };
   }, [id]);
 
+  // When language changes, restart audio for current slide
+  useEffect(() => {
+    if (lesson && isMountedRef.current) {
+      cleanupAudio();
+      setTimeout(() => { if (isMountedRef.current) startAudio(currentSlideRef.current); }, 600);
+    }
+  }, [lang]);
+
   const fetchLesson = async () => {
     try {
       const headers: any = {};
@@ -40,7 +49,6 @@ export default function LessonViewer() {
       if (res.ok) {
         const data = await res.json();
         setLesson(data.lesson);
-        // Auto-play first slide after lesson loads
         setTimeout(() => { if (isMountedRef.current) startAudio(0); }, 800);
       }
     } catch (e) { console.log(e); }
@@ -59,7 +67,6 @@ export default function LessonViewer() {
   };
 
   const startAudio = async (slideIndex: number) => {
-    // Stop any existing audio first
     await cleanupAudio();
     if (!isMountedRef.current) return;
 
@@ -70,7 +77,10 @@ export default function LessonViewer() {
         playsInSilentModeIOS: true,
         staysActiveInBackground: false,
       });
-      const audioUrl = `${BACKEND_URL}/api/audio/slide/${id}/${slideIndex}`;
+      // Use English endpoint when lang is 'en'
+      const audioUrl = lang === 'en'
+        ? `${BACKEND_URL}/api/audio/slide/${id}/${slideIndex}/en`
+        : `${BACKEND_URL}/api/audio/slide/${id}/${slideIndex}`;
       const { sound } = await Audio.Sound.createAsync(
         { uri: audioUrl },
         { shouldPlay: true }
@@ -85,7 +95,6 @@ export default function LessonViewer() {
         if (status.isLoaded && status.didJustFinish) {
           setAudioPlaying(false);
           soundRef.current = null;
-          // Auto-advance to next slide when audio finishes
           const currentIdx = currentSlideRef.current;
           if (lesson && currentIdx < (lesson.slides?.length || 0) - 1) {
             const nextIdx = currentIdx + 1;
@@ -110,7 +119,6 @@ export default function LessonViewer() {
   const goToSlideAndPlay = (index: number) => {
     cleanupAudio();
     setCurrentSlide(index);
-    // Play audio after small delay to let UI settle
     setTimeout(() => { if (isMountedRef.current) startAudio(index); }, 600);
   };
 
@@ -149,46 +157,60 @@ export default function LessonViewer() {
   if (!lesson) return (
     <SafeAreaView style={styles.container}>
       <View style={styles.loader}>
-        <Text style={{ fontSize: 16, color: '#64748B' }}>الدرس غير متاح</Text>
+        <Text style={{ fontSize: 16, color: '#64748B' }}>{t('الدرس غير متاح', 'Lesson not available')}</Text>
         <TouchableOpacity style={styles.backFallback} onPress={() => router.replace('/(tabs)/course')}>
-          <Text style={styles.backFallbackText}>العودة للدورة</Text>
+          <Text style={styles.backFallbackText}>{t('العودة للدورة', 'Back to Course')}</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
   );
 
   const slides = lesson.slides || [];
-
   const currentItem = slides[currentSlide];
+  const rowDir = isRTL ? 'row-reverse' : 'row';
+  const textAlign = isRTL ? 'right' as const : 'left' as const;
+
+  // Get content based on language
+  const slideTitle = lang === 'en' ? (currentItem?.title_en || currentItem?.title) : currentItem?.title;
+  const slideContent = lang === 'en' ? (currentItem?.content_en || currentItem?.content) : currentItem?.content;
+  const keyPoints = lang === 'en' ? (currentItem?.key_points_en || currentItem?.key_points || []) : (currentItem?.key_points || []);
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.topBar}>
+      <View style={[styles.topBar, { flexDirection: rowDir }]}>
         <TouchableOpacity testID="lesson-back-btn" onPress={handleBack} style={styles.topBtn}>
-          <Ionicons name="arrow-forward" size={22} color="#1B365D" />
+          <Ionicons name={isRTL ? "arrow-forward" : "arrow-back"} size={22} color="#1B365D" />
         </TouchableOpacity>
         <View style={styles.topCenter}>
-          <Text style={styles.topTitle} numberOfLines={1}>{lesson.title}</Text>
-          <Text style={styles.topSub}>{lesson.duration_minutes} دقائق</Text>
+          <Text style={styles.topTitle} numberOfLines={1}>
+            {lang === 'en' ? (lesson.title_en || lesson.title) : lesson.title}
+          </Text>
+          <Text style={styles.topSub}>{lesson.duration_minutes} {t('دقائق', 'min')}</Text>
         </View>
         <View style={{ width: 40 }} />
       </View>
 
-      <View style={styles.audioBar}>
+      <View style={[styles.audioBar, { flexDirection: rowDir }]}>
         <TouchableOpacity testID="play-audio-btn" style={[styles.audioBtn, audioPlaying && styles.audioBtnActive]}
           onPress={toggleAudio} disabled={audioLoading}>
           {audioLoading ? <ActivityIndicator size="small" color="#fff" /> :
             <Ionicons name={audioPlaying ? 'pause' : 'play'} size={20} color="#fff" />}
         </TouchableOpacity>
         <View style={styles.audioInfo}>
-          <Text style={styles.audioLabel}>
-            {audioLoading ? 'جاري التحميل...' : audioPlaying ? 'الصوت شغال' : 'اضغط لتشغيل الصوت أو سيعمل تلقائياً'}
+          <Text style={[styles.audioLabel, { textAlign }]}>
+            {audioLoading
+              ? t('جاري التحميل...', 'Loading...')
+              : audioPlaying
+                ? t('الصوت شغال', 'Playing')
+                : t('اضغط لتشغيل الصوت أو سيعمل تلقائياً', 'Tap to play or auto-plays')}
           </Text>
-          <Text style={styles.audioSub}>صوت عمر - لهجة مصرية</Text>
+          <Text style={[styles.audioSub, { textAlign }]}>
+            {lang === 'en' ? 'Guy — American English' : 'صوت عمر - لهجة مصرية'}
+          </Text>
         </View>
       </View>
 
-      <View style={styles.dots}>
+      <View style={[styles.dots, { flexDirection: rowDir }]}>
         {slides.map((_: any, i: number) => (
           <TouchableOpacity key={i} onPress={() => goToSlideAndPlay(i)}>
             <View style={[styles.dot, i === currentSlide && styles.dotActive, i < currentSlide && styles.dotDone]} />
@@ -196,27 +218,26 @@ export default function LessonViewer() {
         ))}
       </View>
 
-      {/* Direct slide rendering instead of FlatList */}
       <ScrollView style={{ flex: 1, marginHorizontal: 16 }} showsVerticalScrollIndicator={false}>
         <View style={styles.slide}>
-          <View style={styles.slideTopBar}>
+          <View style={[styles.slideTopBar, { flexDirection: rowDir }]}>
             <Text style={styles.slideTopText}>PM HOUSE ACADEMY</Text>
             <Text style={styles.slideTopNum}>{currentSlide + 1}/{slides.length}</Text>
           </View>
           <View style={styles.goldAccent} />
           <View style={styles.slideBody}>
-            <Text style={styles.slideTitle}>{currentItem?.title}</Text>
-            <Text style={styles.slideContent}>{currentItem?.content}</Text>
-            {currentItem?.key_points?.length > 0 && (
+            <Text style={[styles.slideTitle, { textAlign }]}>{slideTitle}</Text>
+            <Text style={[styles.slideContent, { textAlign }]}>{slideContent}</Text>
+            {keyPoints?.length > 0 && (
               <View style={styles.keyPointsContainer}>
-                <View style={styles.keyInsightHeader}>
+                <View style={[styles.keyInsightHeader, { flexDirection: rowDir }]}>
                   <Ionicons name="bulb" size={16} color="#D4A843" />
                   <Text style={styles.keyInsightLabel}>KEY POINTS</Text>
                 </View>
-                {currentItem.key_points.map((point: string, i: number) => (
-                  <View key={i} style={styles.keyPointRow}>
+                {keyPoints.map((point: string, i: number) => (
+                  <View key={i} style={[styles.keyPointRow, { flexDirection: rowDir }]}>
                     <View style={styles.bullet} />
-                    <Text style={styles.keyPointText}>{point}</Text>
+                    <Text style={[styles.keyPointText, { textAlign }]}>{point}</Text>
                   </View>
                 ))}
               </View>
@@ -228,16 +249,16 @@ export default function LessonViewer() {
         </View>
       </ScrollView>
 
-      <View style={styles.navButtons}>
+      <View style={[styles.navButtons, { flexDirection: rowDir }]}>
         <TouchableOpacity testID="prev-slide-btn"
           style={[styles.navBtn, styles.navBtnSecondary, currentSlide === 0 && styles.navBtnDisabled]}
           onPress={handlePrev} disabled={currentSlide === 0}>
-          <Ionicons name="arrow-forward" size={18} color={currentSlide === 0 ? '#94A3B8' : '#1D4ED8'} />
-          <Text style={[styles.navBtnSecondaryText, currentSlide === 0 && { color: '#94A3B8' }]}>السابق</Text>
+          <Ionicons name={isRTL ? "arrow-forward" : "arrow-back"} size={18} color={currentSlide === 0 ? '#94A3B8' : '#1D4ED8'} />
+          <Text style={[styles.navBtnSecondaryText, currentSlide === 0 && { color: '#94A3B8' }]}>{t('السابق', 'Previous')}</Text>
         </TouchableOpacity>
         <TouchableOpacity testID="next-slide-btn" style={styles.navBtn} onPress={handleNext}>
-          <Text style={styles.navBtnText}>{currentSlide === slides.length - 1 ? 'الاختبار القصير' : 'التالي'}</Text>
-          <Ionicons name={currentSlide === slides.length - 1 ? 'help-circle' : 'arrow-back'} size={18} color="#fff" />
+          <Text style={styles.navBtnText}>{currentSlide === slides.length - 1 ? t('الاختبار القصير', 'Quiz') : t('التالي', 'Next')}</Text>
+          <Ionicons name={currentSlide === slides.length - 1 ? 'help-circle' : (isRTL ? 'arrow-back' : 'arrow-forward')} size={18} color="#fff" />
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -249,39 +270,39 @@ const styles = StyleSheet.create({
   loader: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F5F5F0', gap: 16 },
   backFallback: { backgroundColor: '#1B365D', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 8 },
   backFallbackText: { color: '#fff', fontSize: 16, fontWeight: '700' },
-  topBar: { flexDirection: 'row-reverse', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12 },
+  topBar: { alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12 },
   topBtn: { padding: 8, backgroundColor: '#E8E8E4', borderRadius: 10 },
   topCenter: { flex: 1, alignItems: 'center' },
   topTitle: { fontSize: 16, fontWeight: '700', color: '#1B365D' },
   topSub: { fontSize: 12, color: '#666', marginTop: 2 },
-  audioBar: { flexDirection: 'row-reverse', alignItems: 'center', gap: 12, marginHorizontal: 16, padding: 12, borderRadius: 10, backgroundColor: '#1B365D' },
+  audioBar: { alignItems: 'center', gap: 12, marginHorizontal: 16, padding: 12, borderRadius: 10, backgroundColor: '#1B365D' },
   audioBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#D4A843', alignItems: 'center', justifyContent: 'center' },
   audioBtnActive: { backgroundColor: '#EA6A0B' },
   audioInfo: { flex: 1 },
-  audioLabel: { fontSize: 13, fontWeight: '600', color: '#fff', textAlign: 'right' },
-  audioSub: { fontSize: 11, color: 'rgba(255,255,255,0.6)', textAlign: 'right', marginTop: 2 },
-  dots: { flexDirection: 'row-reverse', justifyContent: 'center', gap: 8, paddingVertical: 8 },
+  audioLabel: { fontSize: 13, fontWeight: '600', color: '#fff' },
+  audioSub: { fontSize: 11, color: 'rgba(255,255,255,0.6)', marginTop: 2 },
+  dots: { justifyContent: 'center', gap: 8, paddingVertical: 8 },
   dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#D0D0CC' },
   dotActive: { backgroundColor: '#1B365D', width: 24 },
   dotDone: { backgroundColor: '#D4A843' },
-  slide: { backgroundColor: '#fff', borderRadius: 4, overflow: 'hidden', flex: 1, borderWidth: 1, borderColor: '#E0E0DC' },
-  slideBody: { flex: 1, paddingBottom: 8 },
-  slideTopBar: { backgroundColor: '#1B365D', paddingHorizontal: 16, paddingVertical: 10, flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center' },
+  slide: { backgroundColor: '#fff', borderRadius: 4, overflow: 'hidden', borderWidth: 1, borderColor: '#E0E0DC' },
+  slideBody: { paddingBottom: 8 },
+  slideTopBar: { backgroundColor: '#1B365D', paddingHorizontal: 16, paddingVertical: 10, justifyContent: 'space-between', alignItems: 'center' },
   slideTopText: { fontSize: 11, fontWeight: '700', color: '#fff', letterSpacing: 2 },
   slideTopNum: { fontSize: 12, color: 'rgba(255,255,255,0.7)', fontWeight: '600' },
   goldAccent: { height: 3, backgroundColor: '#D4A843' },
-  slideTitle: { fontSize: 20, fontWeight: '700', color: '#1B365D', textAlign: 'right', paddingHorizontal: 20, paddingTop: 20, marginBottom: 12, lineHeight: 30 },
-  slideContent: { fontSize: 15, color: '#333', textAlign: 'right', lineHeight: 24, paddingHorizontal: 20, marginBottom: 16 },
+  slideTitle: { fontSize: 20, fontWeight: '700', color: '#1B365D', paddingHorizontal: 20, paddingTop: 20, marginBottom: 12, lineHeight: 30 },
+  slideContent: { fontSize: 15, color: '#333', lineHeight: 24, paddingHorizontal: 20, marginBottom: 16 },
   keyPointsContainer: { marginHorizontal: 16, marginBottom: 16, backgroundColor: '#F8F8F5', padding: 16, borderRadius: 4, borderLeftWidth: 3, borderLeftColor: '#D4A843' },
-  keyInsightHeader: { flexDirection: 'row-reverse', alignItems: 'center', gap: 6, marginBottom: 10 },
+  keyInsightHeader: { alignItems: 'center', gap: 6, marginBottom: 10 },
   keyInsightLabel: { fontSize: 11, fontWeight: '800', color: '#1B365D', letterSpacing: 2 },
-  keyPointRow: { flexDirection: 'row-reverse', alignItems: 'flex-start', gap: 10, marginBottom: 8 },
+  keyPointRow: { alignItems: 'flex-start', gap: 10, marginBottom: 8 },
   bullet: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#1B365D', marginTop: 6 },
-  keyPointText: { flex: 1, fontSize: 14, color: '#333', textAlign: 'right', lineHeight: 22 },
+  keyPointText: { flex: 1, fontSize: 14, color: '#333', lineHeight: 22 },
   slideFooter: { borderTopWidth: 1, borderTopColor: '#E0E0DC', paddingVertical: 8, paddingHorizontal: 16, marginTop: 'auto' },
   slideFooterText: { fontSize: 10, color: '#999', textAlign: 'center', letterSpacing: 1 },
-  navButtons: { flexDirection: 'row-reverse', paddingHorizontal: 16, paddingVertical: 12, gap: 12 },
-  navBtn: { flex: 1, flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#1B365D', paddingVertical: 14, borderRadius: 8 },
+  navButtons: { paddingHorizontal: 16, paddingVertical: 12, gap: 12 },
+  navBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#1B365D', paddingVertical: 14, borderRadius: 8 },
   navBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
   navBtnSecondary: { backgroundColor: '#F0F0EC', borderWidth: 1, borderColor: '#D0D0CC' },
   navBtnSecondaryText: { color: '#1B365D', fontSize: 16, fontWeight: '700' },

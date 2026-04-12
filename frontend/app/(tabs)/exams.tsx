@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useAuth } from '../_layout';
+import { useAuth, useLang } from '../_layout';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -9,6 +9,7 @@ const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
 
 export default function Exams() {
   const { token, user } = useAuth();
+  const { lang, t, isRTL } = useLang();
   const router = useRouter();
   const [exams, setExams] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -31,8 +32,8 @@ export default function Exams() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>الاختبارات التجريبية</Text>
-        <Text style={styles.headerSub}>اختبر معلوماتك قبل الاختبار الحقيقي</Text>
+        <Text style={[styles.headerTitle, { textAlign: isRTL ? 'right' : 'left' }]}>{t('الاختبارات التجريبية', 'Practice Exams')}</Text>
+        <Text style={[styles.headerSub, { textAlign: isRTL ? 'right' : 'left' }]}>{t('اختبر معلوماتك قبل الاختبار الحقيقي', 'Test your knowledge before the real exam')}</Text>
       </View>
       <ScrollView style={styles.scroll}>
         {!user?.is_paid && (

@@ -1,10 +1,11 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { StyleSheet } from 'react-native';
-import { useAuth } from '../_layout';
+import { StyleSheet, TouchableOpacity, Text, View } from 'react-native';
+import { useAuth, useLang } from '../_layout';
 
 export default function TabsLayout() {
   const { user } = useAuth();
+  const { lang, toggleLang, t } = useLang();
   const isAdmin = user?.role === 'admin';
 
   return (
@@ -20,35 +21,35 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="home"
         options={{
-          title: 'الرئيسية',
+          title: t('الرئيسية', 'Home'),
           tabBarIcon: ({ color, size }) => <Ionicons name="home" size={size} color={color} />,
         }}
       />
       <Tabs.Screen
         name="course"
         options={{
-          title: 'الدورة',
+          title: t('الدورة', 'Course'),
           tabBarIcon: ({ color, size }) => <Ionicons name="book" size={size} color={color} />,
         }}
       />
       <Tabs.Screen
         name="exams"
         options={{
-          title: 'الاختبارات',
+          title: t('الاختبارات', 'Exams'),
           tabBarIcon: ({ color, size }) => <Ionicons name="document-text" size={size} color={color} />,
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
-          title: 'حسابي',
+          title: t('حسابي', 'Profile'),
           tabBarIcon: ({ color, size }) => <Ionicons name="person" size={size} color={color} />,
         }}
       />
       <Tabs.Screen
         name="admin"
         options={{
-          title: 'الإدارة',
+          title: t('الإدارة', 'Admin'),
           tabBarIcon: ({ color, size }) => <Ionicons name="shield-checkmark" size={size} color={color} />,
           href: isAdmin ? '/(tabs)/admin' : null,
         }}

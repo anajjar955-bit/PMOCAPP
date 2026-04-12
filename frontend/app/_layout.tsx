@@ -1,7 +1,8 @@
+import React from 'react';
 import { Stack } from 'expo-router';
-import { useEffect, useState, createContext, useContext } from 'react';
+import { useEffect, useState, createContext, useContext, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, ActivityIndicator, StyleSheet, I18nManager } from 'react-native';
 
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
 
@@ -36,14 +37,51 @@ export const AuthContext = createContext<AuthContextType>({
 
 export const useAuth = () => useContext(AuthContext);
 
+// ========== Language Context ==========
+type Lang = 'ar' | 'en';
+
+interface LangContextType {
+  lang: Lang;
+  toggleLang: () => void;
+  t: (ar: string, en: string) => string;
+  isRTL: boolean;
+}
+
+export const LangContext = createContext<LangContextType>({
+  lang: 'ar',
+  toggleLang: () => {},
+  t: (ar: string, _en: string) => ar,
+  isRTL: true,
+});
+
+export const useLang = () => useContext(LangContext);
+
 export default function RootLayout() {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [lang, setLang] = useState<Lang>('ar');
 
   useEffect(() => {
     checkAuth();
+    loadLang();
   }, []);
+
+  const loadLang = async () => {
+    try {
+      const saved = await AsyncStorage.getItem('app_lang');
+      if (saved === 'en' || saved === 'ar') setLang(saved);
+    } catch (e) {}
+  };
+
+  const toggleLang = useCallback(async () => {
+    const newLang: Lang = lang === 'ar' ? 'en' : 'ar';
+    setLang(newLang);
+    await AsyncStorage.setItem('app_lang', newLang);
+  }, [lang]);
+
+  const t = useCallback((ar: string, en: string) => lang === 'ar' ? ar : en, [lang]);
+  const isRTL = lang === 'ar';
 
   const checkAuth = async () => {
     try {
@@ -122,20 +160,22 @@ export default function RootLayout() {
   }
 
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, register, logout, refreshUser }}>
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="index" />
-        <Stack.Screen name="login" />
-        <Stack.Screen name="register" />
-        <Stack.Screen name="forgot-password" />
-        <Stack.Screen name="(tabs)" />
-        <Stack.Screen name="lesson/[id]" />
-        <Stack.Screen name="quiz/[lessonId]" />
-        <Stack.Screen name="exam/[id]" />
-        <Stack.Screen name="certificate" />
-        <Stack.Screen name="payment" />
-      </Stack>
-    </AuthContext.Provider>
+    <LangContext.Provider value={{ lang, toggleLang, t, isRTL }}>
+      <AuthContext.Provider value={{ user, token, loading, login, register, logout, refreshUser }}>
+        <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="index" />
+          <Stack.Screen name="login" />
+          <Stack.Screen name="register" />
+          <Stack.Screen name="forgot-password" />
+          <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="lesson/[id]" />
+          <Stack.Screen name="quiz/[lessonId]" />
+          <Stack.Screen name="exam/[id]" />
+          <Stack.Screen name="certificate" />
+          <Stack.Screen name="payment" />
+        </Stack>
+      </AuthContext.Provider>
+    </LangContext.Provider>
   );
 }
 

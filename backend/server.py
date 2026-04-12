@@ -254,7 +254,7 @@ async def get_lesson(lesson_id: str, request: Request):
 async def get_lesson_quiz(lesson_id: str, request: Request):
     user = await get_current_user(request)
     questions = await db.questions.find(
-        {"lesson_id": lesson_id}, {"_id": 0, "correct_answer": 0, "explanation": 0}
+        {"lesson_id": lesson_id}, {"_id": 0, "correct_answer": 0}
     ).to_list(100)
     return {"questions": questions}
 
@@ -348,7 +348,7 @@ async def get_exam(exam_id: str, request: Request):
     if not exam:
         raise HTTPException(status_code=404, detail="الاختبار غير موجود")
     questions = await db.exam_questions.find(
-        {"exam_id": exam_id}, {"_id": 0, "correct_answer": 0, "explanation": 0}
+        {"exam_id": exam_id}, {"_id": 0, "correct_answer": 0}
     ).to_list(100)
     return {"exam": exam, "questions": questions}
 
@@ -505,6 +505,59 @@ async def get_slide_audio(lesson_id: str, slide_index: int, request: Request):
     except Exception as e:
         logger.error(f"ElevenLabs TTS failed: {e}")
         raise HTTPException(status_code=500, detail=f"فشل توليد الصوت: {str(e)}")
+
+@api_router.get("/audio/slide/{lesson_id}/{slide_index}/en")
+async def get_slide_audio_en(lesson_id: str, slide_index: int, request: Request):
+    """Generate English TTS audio with edge-tts (free, professional American voice)"""
+    cache_key = f"{lesson_id}_{slide_index}_en"
+    cached = await db.audio_cache.find_one({"cache_key": cache_key}, {"_id": 0})
+    if cached and cached.get("audio_base64"):
+        audio_bytes = base64.b64decode(cached["audio_base64"])
+        return Response(content=audio_bytes, media_type="audio/mp3",
+                       headers={"Cache-Control": "public, max-age=86400"})
+
+    lesson = await db.lessons.find_one({"id": lesson_id}, {"_id": 0})
+    if not lesson:
+        raise HTTPException(status_code=404, detail="Lesson not found")
+    slides = lesson.get("slides", [])
+    if slide_index < 0 or slide_index >= len(slides):
+        raise HTTPException(status_code=404, detail="Slide not found")
+
+    slide = slides[slide_index]
+    # Build English narration text from slide content
+    title = slide.get('title_en', slide.get('title', ''))
+    content = slide.get('content_en', slide.get('content', ''))
+    key_points = slide.get('key_points_en', slide.get('key_points', []))
+    narration = f"{title}. {content}"
+    if key_points:
+        narration += " Key points: " + ". ".join(key_points) + "."
+
+    try:
+        import edge_tts
+        import asyncio
+        import io
+        communicate = edge_tts.Communicate(narration, "en-US-GuyNeural", rate="-5%")
+        audio_data = b""
+        async for chunk in communicate.stream():
+            if chunk["type"] == "audio":
+                audio_data += chunk["data"]
+
+        if audio_data:
+            audio_b64 = base64.b64encode(audio_data).decode("utf-8")
+            await db.audio_cache.update_one(
+                {"cache_key": cache_key},
+                {"$set": {"cache_key": cache_key, "audio_base64": audio_b64,
+                          "narration_text": narration, "lang": "en",
+                          "created_at": datetime.now(timezone.utc).isoformat()}},
+                upsert=True
+            )
+            return Response(content=audio_data, media_type="audio/mp3",
+                           headers={"Cache-Control": "public, max-age=86400"})
+        else:
+            raise HTTPException(status_code=500, detail="No audio data generated")
+    except Exception as e:
+        logger.error(f"Edge TTS failed: {e}")
+        raise HTTPException(status_code=500, detail=f"English audio generation failed: {str(e)}")
 
 # ========== Activation Code System ==========
 import random, string
@@ -732,9 +785,45 @@ async def startup():
         logger.info(f"Admin user created: {admin_email}")
     # Seed course data
     from course_data import get_course_data
+    from course_data_en import get_english_slides, get_english_questions, get_english_exam_questions, get_english_lesson_titles, get_english_module_descriptions
     module_count = await db.modules.count_documents({})
     if module_count == 0:
         modules, lessons, questions, exams, exam_questions = get_course_data()
+        en_slides = get_english_slides()
+        en_questions = get_english_questions()
+        en_exam_questions = get_english_exam_questions()
+        en_titles = get_english_lesson_titles()
+        en_mod_desc = get_english_module_descriptions()
+        # Merge English content into modules
+        for mod in modules:
+            if mod["id"] in en_mod_desc:
+                mod["description_en"] = en_mod_desc[mod["id"]]
+        # Merge English content into lessons
+        for lesson in lessons:
+            lid = lesson["id"]
+            if lid in en_titles:
+                lesson["title_en"] = en_titles[lid]
+            if lid in en_slides:
+                en_sl = en_slides[lid]
+                for i, slide in enumerate(lesson.get("slides", [])):
+                    if i < len(en_sl):
+                        slide["title_en"] = en_sl[i].get("title_en", slide["title"])
+                        slide["content_en"] = en_sl[i].get("content_en", slide.get("content", ""))
+                        slide["key_points_en"] = en_sl[i].get("key_points_en", slide.get("key_points", []))
+        # Merge English content into questions
+        for q in questions:
+            if q["id"] in en_questions:
+                eq = en_questions[q["id"]]
+                q["scenario_en"] = eq.get("scenario_en", q["scenario"])
+                q["options_en"] = eq.get("options_en", q["options"])
+                q["explanation_en"] = eq.get("explanation_en", q.get("explanation", ""))
+        # Merge English content into exam questions
+        for eq in exam_questions:
+            if eq["id"] in en_exam_questions:
+                eqe = en_exam_questions[eq["id"]]
+                eq["scenario_en"] = eqe.get("scenario_en", eq["scenario"])
+                eq["options_en"] = eqe.get("options_en", eq["options"])
+                eq["explanation_en"] = eqe.get("explanation_en", eq.get("explanation", ""))
         if modules:
             await db.modules.insert_many(modules)
         if lessons:
@@ -745,7 +834,7 @@ async def startup():
             await db.exams.insert_many(exams)
         if exam_questions:
             await db.exam_questions.insert_many(exam_questions)
-        logger.info("Course data seeded successfully!")
+        logger.info("Course data seeded with bilingual content!")
     # Write test credentials
     memory_dir = pathlib.Path("/app/memory")
     memory_dir.mkdir(exist_ok=True)
