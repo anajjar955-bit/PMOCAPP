@@ -337,16 +337,14 @@ async def get_progress(request: Request):
 # ========== Audio TTS Routes ==========
 @api_router.get("/audio/slide/{lesson_id}/{slide_index}")
 async def get_slide_audio(lesson_id: str, slide_index: int, request: Request):
-    """Generate or retrieve cached TTS audio for a slide with Egyptian Arabic narration"""
-    # Check cache first
-    cache_key = f"{lesson_id}_{slide_index}_v2"
+    """Generate TTS audio with Egyptian Arabic narration and vocal modulation"""
+    cache_key = f"{lesson_id}_{slide_index}_v3"
     cached = await db.audio_cache.find_one({"cache_key": cache_key}, {"_id": 0})
     if cached and cached.get("audio_base64"):
         audio_bytes = base64.b64decode(cached["audio_base64"])
         return Response(content=audio_bytes, media_type="audio/mp3",
                        headers={"Cache-Control": "public, max-age=86400"})
 
-    # Get lesson and slide content
     lesson = await db.lessons.find_one({"id": lesson_id}, {"_id": 0})
     if not lesson:
         raise HTTPException(status_code=404, detail="Lesson not found")
@@ -360,61 +358,103 @@ async def get_slide_audio(lesson_id: str, slide_index: int, request: Request):
     if key_points:
         slide_content += "النقاط الرئيسية:\n" + "\n".join(f"- {p}" for p in key_points)
 
-    # Step 1: Generate engaging Egyptian Arabic narration using GPT
+    # Step 1: Generate narration with 3 segments for vocal variety
     try:
         from emergentintegrations.llm.openai import LlmChat, UserMessage
         import hashlib
-        session_id = f"narration_{hashlib.md5(cache_key.encode()).hexdigest()[:8]}"
+        sid = f"nar_{hashlib.md5(cache_key.encode()).hexdigest()[:8]}"
         chat = LlmChat(
             api_key=os.getenv("EMERGENT_LLM_KEY"),
-            session_id=session_id,
-            system_message="أنت مدرب محترف في إدارة المشاريع اسمك أحمد، بتشرح دورة تدريبية للإعداد لاختبار PMI-PMO CP. بتشرح بالعامية المصرية بحماس وتشويق. بتنوع بين الحماس والهدوء عشان الكلام ما يبقاش ممل. بتستخدم أمثلة بسيطة من الحياة العملية."
+            session_id=sid,
+            system_message="أنت مدرب مصري اسمه أحمد متخصص في إدارة المشاريع. بتشرح بالعامية المصرية. لازم تكتب الكلام بالعامية المصرية الصح مش فصحى."
         )
         chat = chat.with_model("openai", "gpt-4o-mini")
-        prompt = f"""اشرح المحتوى ده بأسلوب عامية مصرية متحمسة كأنك بتتكلم في فيديو تدريبي:
 
+        prompt = f"""اكتب شرح للمحتوى التالي كأنك مدرب مصري في فيديو تدريبي. 
+
+المحتوى:
 {slide_content}
 
-الشروط:
-- اشرح بالعامية المصرية المتحمسة مش الفصحى
-- استخدم عبارات زي "تعالوا نفهم مع بعض"، "يعني ايه الكلام ده؟"، "ركزوا معايا"، "الحكاية ببساطة"
-- نوّع بين الحماس والهدوء
-- اشرح المفاهيم بأمثلة عملية بسيطة
-- خلي الكلام في حدود 120-150 كلمة
-- اكتب كلام متصل كأنك بتتكلم - بدون عناوين أو نقاط"""
+اكتب الشرح مقسم لـ 3 أجزاء منفصلة بعلامة ||| بين كل جزء:
+
+الجزء 1 (مقدمة حماسية - 30 كلمة): ابدأ بحماس عالي! استخدم عبارات زي "أهلاً بيكم يا جماعة!"، "تعالوا نتكلم عن حاجة مهمة جداً!"، "النهارده هنفهم مع بعض..."
+
+|||
+
+الجزء 2 (شرح هادي ومفصل - 60 كلمة): اشرح المحتوى بهدوء وتركيز. استخدم "يعني ببساطة كده..."، "خلوني أقولكم..."، "الفكرة إن..."، اشرح بأمثلة من الواقع.
+
+|||
+
+الجزء 3 (ملخص ونقاط مهمة - 40 كلمة): لخص بحماس متوسط. "يبقى الخلاصة..."، "أهم حاجة تفتكروها..."، "كده فهمنا إن..."
+
+قواعد مهمة:
+- اكتب بالعامية المصرية 100% - مش فصحى!  
+- استخدم كلمات زي: دلوقتي، كده، عشان، ليه، إزاي، يعني، بتاع، حاجة
+- اكتب كلام متصل بدون نقاط أو ترقيم
+- لا تكتب أرقام أو مصطلحات إنجليزية - اكتبها بالعربي"""
 
         narration = await chat.send_message(UserMessage(text=prompt))
-        narration = narration[:4096]
-        logger.info(f"Generated Egyptian narration for {cache_key}: {narration[:100]}...")
+        segments = [s.strip() for s in narration.split("|||") if s.strip()]
+        logger.info(f"Generated {len(segments)} segments for {cache_key}")
     except Exception as e:
         logger.error(f"GPT narration failed: {e}")
-        # Fallback: use slide content directly
-        narration = f"{slide['title']}. {slide.get('content', '')}. "
+        text = f"{slide['title']}. {slide.get('content', '')}."
         if key_points:
-            narration += "النقاط الرئيسية: " + "، ".join(key_points) + "."
-        narration = narration[:4096]
+            text += " " + "، ".join(key_points)
+        segments = [text[:4096]]
 
-    # Step 2: Convert narration to speech using TTS
+    # Step 2: Generate audio for each segment with different speeds
+    from emergentintegrations.llm.openai import OpenAITextToSpeech
+    tts = OpenAITextToSpeech(api_key=os.getenv("EMERGENT_LLM_KEY"))
+    speeds = [1.15, 0.95, 1.05]  # Fast intro, slow middle, medium outro
+    voices = ["coral", "coral", "coral"]  # coral = warm and friendly
+
     try:
-        from emergentintegrations.llm.openai import OpenAITextToSpeech
-        tts = OpenAITextToSpeech(api_key=os.getenv("EMERGENT_LLM_KEY"))
-        audio_bytes = await tts.generate_speech(
-            text=narration,
-            model="tts-1-hd",
-            voice="onyx",
-            speed=1.05,
-            response_format="mp3"
-        )
-        # Cache the audio
-        audio_b64 = base64.b64encode(audio_bytes).decode("utf-8")
+        audio_parts = []
+        for i, seg in enumerate(segments[:3]):
+            if not seg:
+                continue
+            spd = speeds[i] if i < len(speeds) else 1.0
+            audio_bytes = await tts.generate_speech(
+                text=seg[:4096],
+                model="tts-1-hd",
+                voice=voices[i] if i < len(voices) else "coral",
+                speed=spd,
+                response_format="mp3"
+            )
+            audio_parts.append(audio_bytes)
+
+        # Combine audio segments with pydub for smooth transitions
+        import io
+        from pydub import AudioSegment
+
+        combined = AudioSegment.empty()
+        pause = AudioSegment.silent(duration=400)  # 400ms pause between segments
+
+        for i, part_bytes in enumerate(audio_parts):
+            segment = AudioSegment.from_mp3(io.BytesIO(part_bytes))
+            # Vary volume slightly: intro louder, middle normal, outro medium
+            if i == 0:
+                segment = segment + 2  # +2dB louder for intro
+            elif i == 1:
+                segment = segment - 1  # slightly softer for detailed explanation
+            combined += segment + pause
+
+        # Export final audio
+        output = io.BytesIO()
+        combined.export(output, format="mp3", bitrate="128k")
+        final_audio = output.getvalue()
+
+        # Cache
+        audio_b64 = base64.b64encode(final_audio).decode("utf-8")
         await db.audio_cache.update_one(
             {"cache_key": cache_key},
             {"$set": {"cache_key": cache_key, "audio_base64": audio_b64,
-                      "narration_text": narration,
+                      "narration_text": "|||".join(segments),
                       "created_at": datetime.now(timezone.utc).isoformat()}},
             upsert=True
         )
-        return Response(content=audio_bytes, media_type="audio/mp3",
+        return Response(content=final_audio, media_type="audio/mp3",
                        headers={"Cache-Control": "public, max-age=86400"})
     except Exception as e:
         logger.error(f"TTS generation failed: {e}")
