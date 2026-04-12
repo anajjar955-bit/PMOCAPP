@@ -103,7 +103,7 @@ body { font-family: 'Inter', 'Segoe UI', 'Aptos', Arial, sans-serif; background:
       <img src="data:image/png;base64,${PMI_SEAL_B64}" alt="PMI Seal" />
     </div>
     <div class="instructor-area">
-      <div class="instructor-name">Ahmad Al-Najjar</div>
+      <div class="instructor-name">Akram Elnagar</div>
       <div class="instructor-line"></div>
       <div class="instructor-label">Name of Instructor</div>
     </div>
@@ -204,7 +204,7 @@ body { font-family: 'Inter', 'Segoe UI', 'Aptos', Arial, sans-serif; background:
 
                 {/* Instructor center */}
                 <View style={s.instructorArea}>
-                  <Text style={s.instructorName}>Ahmad Al-Najjar</Text>
+                  <Text style={s.instructorName}>Akram Elnagar</Text>
                   <View style={s.instructorLine} />
                   <Text style={s.instructorLabel}>Name of Instructor</Text>
                 </View>
