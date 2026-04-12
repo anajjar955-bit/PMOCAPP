@@ -91,6 +91,10 @@ export default function Login() {
             {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitText}>تسجيل الدخول</Text>}
           </TouchableOpacity>
 
+          <TouchableOpacity testID="forgot-password-link" onPress={() => router.push('/forgot-password')} style={styles.forgotBtn}>
+            <Text style={styles.forgotText}>نسيت كلمة المرور؟</Text>
+          </TouchableOpacity>
+
           <TouchableOpacity testID="go-to-register" onPress={() => router.push('/register')} style={styles.switchBtn}>
             <Text style={styles.switchText}>ليس لديك حساب؟ <Text style={styles.switchLink}>سجل الآن</Text></Text>
           </TouchableOpacity>
@@ -117,6 +121,8 @@ const styles = StyleSheet.create({
   inputIcon: { marginLeft: 8 },
   submitBtn: { backgroundColor: '#1D4ED8', paddingVertical: 16, borderRadius: 14, alignItems: 'center', marginTop: 8 },
   submitText: { color: '#fff', fontSize: 17, fontWeight: '700' },
+  forgotBtn: { alignItems: 'center', marginTop: 14 },
+  forgotText: { fontSize: 14, color: '#1D4ED8', fontWeight: '600' },
   switchBtn: { alignItems: 'center', marginTop: 20, paddingBottom: 32 },
   switchText: { fontSize: 15, color: '#64748B' },
   switchLink: { color: '#1D4ED8', fontWeight: '700' },

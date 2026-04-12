@@ -9,12 +9,13 @@ const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
 
 export default function AdminPanel() {
   const { user, token } = useAuth();
-  const [tab, setTab] = useState<'codes' | 'users'>('users');
+  const [tab, setTab] = useState<'codes' | 'users' | 'resets'>('users');
   const [email, setEmail] = useState('');
   const [generating, setGenerating] = useState(false);
   const [generatedCode, setGeneratedCode] = useState('');
   const [codes, setCodes] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
+  const [resets, setResets] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState('');
 
@@ -22,7 +23,7 @@ export default function AdminPanel() {
 
   const fetchData = async () => {
     setLoading(true);
-    await Promise.all([fetchCodes(), fetchUsers()]);
+    await Promise.all([fetchCodes(), fetchUsers(), fetchResets()]);
     setLoading(false);
   };
 
@@ -37,6 +38,13 @@ export default function AdminPanel() {
     try {
       const res = await fetch(`${BACKEND_URL}/api/admin/users`, { headers: { 'Authorization': `Bearer ${token}` } });
       if (res.ok) setUsers((await res.json()).users || []);
+    } catch (e) {}
+  };
+
+  const fetchResets = async () => {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/admin/reset-requests`, { headers: { 'Authorization': `Bearer ${token}` } });
+      if (res.ok) setResets((await res.json()).resets || []);
     } catch (e) {}
   };
 
@@ -138,11 +146,14 @@ export default function AdminPanel() {
             <Text style={[styles.tabText, tab === 'users' && styles.tabTextActive]}>المستخدمين</Text>
           </TouchableOpacity>
           <TouchableOpacity testID="tab-codes" style={[styles.tabBtn, tab === 'codes' && styles.tabActive]} onPress={() => setTab('codes')}>
-            <Text style={[styles.tabText, tab === 'codes' && styles.tabTextActive]}>أكواد التفعيل</Text>
+            <Text style={[styles.tabText, tab === 'codes' && styles.tabTextActive]}>الأكواد</Text>
+          </TouchableOpacity>
+          <TouchableOpacity testID="tab-resets" style={[styles.tabBtn, tab === 'resets' && styles.tabActive]} onPress={() => setTab('resets')}>
+            <Text style={[styles.tabText, tab === 'resets' && styles.tabTextActive]}>إعادة تعيين</Text>
           </TouchableOpacity>
         </View>
 
-        {tab === 'users' ? (
+        {tab === 'users' && (
           <>
             {/* Export Button */}
             <TouchableOpacity testID="export-excel-btn" style={styles.exportBtn} onPress={exportExcel}>
@@ -188,7 +199,9 @@ export default function AdminPanel() {
               ))
             }
           </>
-        ) : (
+        )}
+
+        {tab === 'codes' && (
           <>
             {/* Generate Code */}
             <View style={styles.generateCard}>
@@ -216,8 +229,6 @@ export default function AdminPanel() {
                 </View>
               ) : null}
             </View>
-
-            {/* Codes List */}
             <Text style={styles.listTitle}>الأكواد ({codes.length})</Text>
             {codes.map((c, i) => (
               <View key={i} style={styles.codeCard}>
@@ -227,6 +238,39 @@ export default function AdminPanel() {
                   <TouchableOpacity onPress={() => copyText(c.code, c.code)}><Ionicons name={copied === c.code ? 'checkmark' : 'copy-outline'} size={16} color="#64748B" /></TouchableOpacity>
                 </View>
                 <Text style={styles.codeCardEmail}>{c.email} • {c.used ? 'مستخدم ✓' : 'نشط'} • {c.created_at?.split('T')[0]}</Text>
+              </View>
+            ))}
+          </>
+        )}
+
+        {tab === 'resets' && (
+          <>
+            <Text style={styles.listTitle}>طلبات إعادة تعيين كلمة المرور ({resets.length})</Text>
+            {resets.length === 0 ? (
+              <View style={styles.emptyBox}><Ionicons name="lock-open-outline" size={32} color="#94A3B8" /><Text style={styles.emptyText}>لا توجد طلبات</Text></View>
+            ) : resets.map((r, i) => (
+              <View key={i} style={[styles.codeCard, !r.used && { borderColor: '#FCA5A5', borderWidth: 2 }]}>
+                <View style={styles.codeCardRow}>
+                  <View style={[styles.dot, r.used ? styles.dotUsed : { backgroundColor: '#DC2626' }]} />
+                  <Text style={styles.codeCardCode}>{r.name || r.email}</Text>
+                  <Text style={{ fontSize: 12, color: r.used ? '#94A3B8' : '#DC2626', fontWeight: '700' }}>{r.used ? 'تم' : 'بانتظار'}</Text>
+                </View>
+                <Text style={styles.codeCardEmail}>{r.email} • {r.created_at?.split('T')[0]}</Text>
+                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8, marginTop: 8, backgroundColor: '#F8FAFC', padding: 10, borderRadius: 8 }}>
+                  <Text style={{ fontSize: 13, color: '#64748B' }}>الكود:</Text>
+                  <Text style={{ fontSize: 18, fontWeight: '800', color: '#0F172A', letterSpacing: 3 }}>{r.code}</Text>
+                  <TouchableOpacity onPress={() => copyText(r.code, 'r_' + r.code)}><Ionicons name={copied === 'r_' + r.code ? 'checkmark' : 'copy-outline'} size={16} color="#1D4ED8" /></TouchableOpacity>
+                </View>
+                {!r.used && (
+                  <TouchableOpacity style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 6, marginTop: 8, alignSelf: 'flex-end' }}
+                    onPress={() => {
+                      const msg = 'كود إعادة تعيين كلمة المرور: ' + r.code + '\nأدخل الكود في نسيت كلمة المرور في التطبيق.\nPM House Academy';
+                      copyText(msg, 'wr_' + r.code);
+                    }}>
+                    <Ionicons name={copied === 'wr_' + r.code ? 'checkmark' : 'logo-whatsapp'} size={14} color="#25D366" />
+                    <Text style={{ fontSize: 12, color: '#25D366', fontWeight: '600' }}>{copied === 'wr_' + r.code ? 'تم النسخ!' : 'انسخ رسالة واتساب'}</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             ))}
           </>
@@ -293,4 +337,6 @@ const styles = StyleSheet.create({
   dotUsed: { backgroundColor: '#94A3B8' },
   codeCardCode: { fontSize: 15, fontWeight: '700', color: '#0F172A', flex: 1, textAlign: 'right', letterSpacing: 1 },
   codeCardEmail: { fontSize: 12, color: '#64748B', textAlign: 'right', marginTop: 4 },
+  emptyText: { fontSize: 14, color: '#94A3B8', textAlign: 'center' },
+  emptyBox: { alignItems: 'center', padding: 30, gap: 8 },
 });

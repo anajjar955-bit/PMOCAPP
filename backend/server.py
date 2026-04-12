@@ -152,6 +152,58 @@ async def get_me(request: Request):
     user = await get_current_user(request)
     return {"user": user}
 
+# ========== Password Reset ==========
+class ResetRequest(BaseModel):
+    email: str
+
+class ResetConfirm(BaseModel):
+    email: str
+    code: str
+    new_password: str
+
+@api_router.post("/auth/request-reset")
+async def request_password_reset(req: ResetRequest):
+    email = req.email.lower().strip()
+    user = await db.users.find_one({"email": email})
+    if not user:
+        raise HTTPException(status_code=404, detail="البريد الإلكتروني غير مسجل")
+    code = ''.join(random.choices(string.digits, k=6))
+    await db.password_resets.update_one(
+        {"email": email},
+        {"$set": {
+            "email": email,
+            "code": code,
+            "name": user.get("name", ""),
+            "used": False,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "expires_at": (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
+        }},
+        upsert=True
+    )
+    return {"success": True, "message": "تم إنشاء كود إعادة التعيين. تواصل مع الأدمن عبر واتساب لاستلام الكود."}
+
+@api_router.post("/auth/reset-password")
+async def reset_password(req: ResetConfirm):
+    email = req.email.lower().strip()
+    if len(req.new_password) < 6:
+        raise HTTPException(status_code=400, detail="كلمة المرور يجب أن تكون 6 أحرف على الأقل")
+    record = await db.password_resets.find_one({"email": email, "code": req.code, "used": False}, {"_id": 0})
+    if not record:
+        raise HTTPException(status_code=400, detail="كود إعادة التعيين غير صحيح أو منتهي الصلاحية")
+    if record.get("expires_at") and record["expires_at"] < datetime.now(timezone.utc).isoformat():
+        raise HTTPException(status_code=400, detail="انتهت صلاحية الكود. اطلب كود جديد.")
+    await db.password_resets.update_one({"email": email, "code": req.code}, {"$set": {"used": True}})
+    await db.users.update_one({"email": email}, {"$set": {"password_hash": hash_password(req.new_password)}})
+    return {"success": True, "message": "تم تغيير كلمة المرور بنجاح!"}
+
+@api_router.get("/admin/reset-requests")
+async def list_reset_requests(request: Request):
+    user = await get_current_user(request)
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    resets = await db.password_resets.find({}, {"_id": 0}).sort("created_at", -1).to_list(50)
+    return {"resets": resets}
+
 # ========== Course Routes ==========
 @api_router.get("/course/modules")
 async def get_modules(request: Request):
