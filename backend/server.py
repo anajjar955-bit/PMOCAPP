@@ -418,7 +418,7 @@ async def get_progress(request: Request):
 @api_router.get("/audio/slide/{lesson_id}/{slide_index}")
 async def get_slide_audio(lesson_id: str, slide_index: int, request: Request):
     """Generate TTS audio with ElevenLabs Egyptian Arabic voice"""
-    cache_key = f"{lesson_id}_{slide_index}_el1"
+    cache_key = f"{lesson_id}_{slide_index}_haitham"
     cached = await db.audio_cache.find_one({"cache_key": cache_key}, {"_id": 0})
     if cached and cached.get("audio_base64"):
         audio_bytes = base64.b64decode(cached["audio_base64"])
@@ -438,29 +438,29 @@ async def get_slide_audio(lesson_id: str, slide_index: int, request: Request):
     if key_points:
         slide_content += "نقاط: " + " / ".join(key_points)
 
-    # Step 1: Generate Egyptian Arabic narration using GPT
+    # Step 1: Generate Arabic narration with FULL tashkeel using GPT
     try:
         from emergentintegrations.llm.openai import LlmChat, UserMessage
         import hashlib
-        sid = f"el_{hashlib.md5(cache_key.encode()).hexdigest()[:8]}"
+        sid = f"ht_{hashlib.md5(cache_key.encode()).hexdigest()[:8]}"
         chat = LlmChat(
             api_key=os.getenv("EMERGENT_LLM_KEY"),
             session_id=sid,
-            system_message="أنت مدرب مصري متخصص في إدارة المشاريع. بتشرح بالعامية المصرية الطبيعية زي ما بتتكلم مع صحابك."
+            system_message="أنتَ مُحاضِرٌ مُتَخَصِّصٌ فِي إِدارَةِ المَشارِيعِ. تَشْرَحُ بِالعَرَبِيَّةِ الفُصْحَى المُبَسَّطَةِ بِأُسْلُوبٍ مِهْنِيٍّ وَاضِحٍ. يَجِبُ أَنْ يَكُونَ كُلُّ حَرْفٍ مُشَكَّلاً تَشْكِيلاً كامِلاً."
         )
         chat = chat.with_model("openai", "gpt-4o-mini")
-        prompt = f"""اشرح المحتوى ده كأنك مدرب مصري بتشرح في فيديو:
+        prompt = f"""اشْرَحْ هَذا المُحْتَوَى كَمُحاضِرٍ مِهْنِيٍّ فِي دَوْرَةٍ تَدْرِيبِيَّةٍ:
 
 {slide_content}
 
-اكتب شرح بالعامية المصرية الطبيعية في حدود 100-130 كلمة.
-- ابدأ بمقدمة حماسية قصيرة
-- اشرح بهدوء مع أمثلة من الواقع
-- اختم بخلاصة سريعة
-- استخدم كلمات مصرية: دلوقتي، كده، عشان، يعني، بتاع، حاجة، إزاي، ليه
-- اكتب كلام متصل بدون عناوين أو نقاط
-- خلي الكلام طبيعي زي حد بيتكلم مش بيقرأ
-- مهم جداً: ضع تشكيل كامل على كل الكلمات العربية (فتحة، ضمة، كسرة، سكون، شدة، تنوين) عشان القراءة تكون مظبوطة 100%"""
+المَطْلُوب:
+- اكْتُبْ شَرْحاً بِالعَرَبِيَّةِ الفُصْحَى المُبَسَّطَةِ فِي حُدُودِ 100-130 كَلِمَة
+- ابْدَأْ بِمُقَدِّمَةٍ قَصِيرَةٍ
+- اشْرَحْ بِوُضُوحٍ مَعَ أَمْثِلَةٍ عَمَلِيَّةٍ
+- اخْتِمْ بِخُلاصَةٍ سَرِيعَةٍ
+- اكْتُبْ كَلاماً مُتَّصِلاً بِدُونِ عَناوِينَ أَوْ نِقاطٍ
+- مُهِمٌّ جِدّاً جِدّاً: ضَعْ تَشْكِيلاً كامِلاً عَلَى كُلِّ حَرْفٍ عَرَبِيٍّ (فَتْحَة، ضَمَّة، كَسْرَة، سُكُون، شَدَّة، تَنْوِين) بِدُونِ اسْتِثْناء
+- كُلُّ كَلِمَةٍ يَجِبُ أَنْ تَكُونَ مُشَكَّلَةً تَشْكِيلاً كامِلاً مِثْلَ القُرْآنِ الكَرِيمِ"""
 
         narration = await chat.send_message(UserMessage(text=prompt))
         narration = narration.strip()[:4096]
@@ -469,21 +469,21 @@ async def get_slide_audio(lesson_id: str, slide_index: int, request: Request):
         logger.error(f"GPT narration failed: {e}")
         narration = f"{slide['title']}. {slide.get('content', '')}."
 
-    # Step 2: Generate audio using ElevenLabs with Egyptian voice
+    # Step 2: Generate audio using ElevenLabs with Haitham voice
     try:
         from elevenlabs import ElevenLabs as ElevenLabsClient
         from elevenlabs.types import VoiceSettings
         el_client = ElevenLabsClient(api_key=os.getenv("ELEVENLABS_API_KEY"))
-        voice_id = os.getenv("ELEVENLABS_VOICE_ID", "rMheqEfwsIJckq2yCdb5")
+        voice_id = os.getenv("ELEVENLABS_VOICE_ID", "UR972wNGq3zluze0LoIp")
 
         audio_gen = el_client.text_to_speech.convert(
             text=narration,
             voice_id=voice_id,
             model_id="eleven_multilingual_v2",
             voice_settings=VoiceSettings(
-                stability=0.35,
-                similarity_boost=0.85,
-                style=0.7,
+                stability=0.5,
+                similarity_boost=0.8,
+                style=0.4,
                 use_speaker_boost=True
             )
         )
