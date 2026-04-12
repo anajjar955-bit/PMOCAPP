@@ -1,17 +1,15 @@
-import { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Linking, Alert, ActivityIndicator, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Linking, Alert, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from './_layout';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
-const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
 const PAYPAL_LINK = "https://www.paypal.com/ncp/payment/QEL5ME5XAAD96";
+const WHATSAPP_NUMBER = "201005394312";
 
 export default function Payment() {
-  const { user, token, refreshUser } = useAuth();
+  const { user } = useAuth();
   const router = useRouter();
-  const [confirming, setConfirming] = useState(false);
 
   const openPayPal = async () => {
     try {
@@ -21,24 +19,16 @@ export default function Payment() {
     }
   };
 
-  const confirmPayment = async () => {
-    setConfirming(true);
+  const openWhatsApp = async () => {
+    const message = encodeURIComponent(
+      `مرحباً PM House 🏠\n\nأريد تفعيل اشتراكي في دورة PMI-PMO CP\n\nالاسم: ${user?.name || ''}\nالإيميل: ${user?.email || ''}\n\nتم الدفع عبر PayPal ✓`
+    );
+    const whatsappUrl = `https://wa.me/${WHATSAPP_NUMBER}?text=${message}`;
     try {
-      const res = await fetch(`${BACKEND_URL}/api/payment/confirm`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ transaction_id: 'paypal_manual' }),
-      });
-      if (res.ok) {
-        await refreshUser();
-        Alert.alert('تم التفعيل! ✓', 'يمكنك الآن الوصول لجميع الدروس والاختبارات', [
-          { text: 'ابدأ التعلم', onPress: () => router.replace('/(tabs)/home') }
-        ]);
-      }
+      await Linking.openURL(whatsappUrl);
     } catch (e) {
-      Alert.alert('خطأ', 'حدث خطأ أثناء التأكيد');
+      Alert.alert('خطأ', 'لا يمكن فتح واتساب');
     }
-    setConfirming(false);
   };
 
   if (user?.is_paid) {
@@ -72,7 +62,6 @@ export default function Payment() {
         <View style={styles.priceCard}>
           <Text style={styles.priceLabel}>سعر الاشتراك</Text>
           <View style={styles.priceRow}>
-            <Text style={styles.currency}>$</Text>
             <Text style={styles.priceAmount}>الدفع عبر PayPal</Text>
           </View>
           <Text style={styles.priceNote}>وصول كامل للدورة مدى الحياة</Text>
@@ -81,7 +70,7 @@ export default function Payment() {
         <View style={styles.features}>
           <Text style={styles.featuresTitle}>يشمل الاشتراك:</Text>
           {[
-            '25 درس تفاعلي مع شرائح عرض',
+            '24 درس تفاعلي مع شرح صوتي بالعربي',
             '50+ سؤال تدريبي سيناريو',
             'اختباران تجريبيان كاملان',
             'شهادة إتمام من PM House',
@@ -105,8 +94,8 @@ export default function Payment() {
             <Text style={styles.stepText}>أكمل عملية الدفع في PayPal</Text>
           </View>
           <View style={styles.step}>
-            <View style={styles.stepNum}><Text style={styles.stepNumText}>3</Text></View>
-            <Text style={styles.stepText}>عد للتطبيق واضغط "تأكيد الدفع"</Text>
+            <View style={[styles.stepNum, { backgroundColor: '#25D366' }]}><Text style={styles.stepNumText}>3</Text></View>
+            <Text style={styles.stepText}>أرسل إيصال الدفع عبر واتساب للتفعيل</Text>
           </View>
         </View>
 
@@ -115,14 +104,17 @@ export default function Payment() {
           <Text style={styles.paypalBtnText}>ادفع عبر PayPal</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity testID="confirm-payment-btn" style={styles.confirmBtn} onPress={confirmPayment} disabled={confirming}>
-          {confirming ? <ActivityIndicator color="#1D4ED8" /> : (
-            <>
-              <Ionicons name="checkmark-circle" size={20} color="#1D4ED8" />
-              <Text style={styles.confirmBtnText}>تأكيد الدفع وتفعيل الاشتراك</Text>
-            </>
-          )}
+        <TouchableOpacity testID="whatsapp-confirm-btn" style={styles.whatsappBtn} onPress={openWhatsApp}>
+          <Ionicons name="logo-whatsapp" size={24} color="#fff" />
+          <Text style={styles.whatsappBtnText}>أرسل إيصال الدفع عبر واتساب</Text>
         </TouchableOpacity>
+
+        <View style={styles.contactInfo}>
+          <Ionicons name="information-circle-outline" size={18} color="#64748B" />
+          <Text style={styles.contactText}>
+            بعد الدفع، أرسل صورة الإيصال على واتساب وسيتم تفعيل حسابك خلال دقائق
+          </Text>
+        </View>
 
         <View style={{ height: 32 }} />
       </ScrollView>
@@ -146,7 +138,6 @@ const styles = StyleSheet.create({
   priceCard: { backgroundColor: '#1D4ED8', borderRadius: 16, padding: 24, alignItems: 'center', marginBottom: 20 },
   priceLabel: { fontSize: 14, color: 'rgba(255,255,255,0.8)' },
   priceRow: { flexDirection: 'row-reverse', alignItems: 'baseline', gap: 4, marginTop: 8 },
-  currency: { fontSize: 20, color: '#fff', fontWeight: '700' },
   priceAmount: { fontSize: 20, fontWeight: '800', color: '#fff' },
   priceNote: { fontSize: 13, color: 'rgba(255,255,255,0.7)', marginTop: 8 },
   features: { marginBottom: 20 },
@@ -158,9 +149,11 @@ const styles = StyleSheet.create({
   step: { flexDirection: 'row-reverse', alignItems: 'center', gap: 12, marginBottom: 10 },
   stepNum: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#EA580C', alignItems: 'center', justifyContent: 'center' },
   stepNumText: { color: '#fff', fontSize: 14, fontWeight: '700' },
-  stepText: { fontSize: 14, color: '#374151', flex: 1, textAlign: 'right' },
+  stepText: { fontSize: 14, color: '#374141', flex: 1, textAlign: 'right' },
   paypalBtn: { backgroundColor: '#0070BA', flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center', gap: 10, paddingVertical: 16, borderRadius: 14, marginBottom: 12 },
   paypalBtnText: { color: '#fff', fontSize: 18, fontWeight: '700' },
-  confirmBtn: { flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 14, borderRadius: 14, borderWidth: 2, borderColor: '#1D4ED8', backgroundColor: '#EFF6FF' },
-  confirmBtnText: { color: '#1D4ED8', fontSize: 16, fontWeight: '700' },
+  whatsappBtn: { backgroundColor: '#25D366', flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center', gap: 10, paddingVertical: 16, borderRadius: 14, marginBottom: 16 },
+  whatsappBtnText: { color: '#fff', fontSize: 18, fontWeight: '700' },
+  contactInfo: { flexDirection: 'row-reverse', alignItems: 'flex-start', gap: 8, backgroundColor: '#F1F5F9', padding: 14, borderRadius: 12 },
+  contactText: { flex: 1, fontSize: 13, color: '#64748B', textAlign: 'right', lineHeight: 20 },
 });

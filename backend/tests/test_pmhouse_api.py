@@ -243,41 +243,119 @@ class TestExams:
 class TestPayment:
     """Payment endpoints tests"""
     
-    def test_get_payment_link(self):
-        """Test GET /api/payment/link"""
-        response = requests.get(f"{BASE_URL}/api/payment/link")
+    def test_get_payment_info(self):
+        """Test GET /api/payment/info"""
+        response = requests.get(f"{BASE_URL}/api/payment/info")
         assert response.status_code == 200
         data = response.json()
         assert "paypal_link" in data
         assert "paypal.com" in data["paypal_link"]
+        assert "whatsapp_number" in data
+        assert data["whatsapp_number"] == "201005394312"
+        assert "whatsapp_link" in data
+        assert "wa.me/201005394312" in data["whatsapp_link"]
+
+
+class TestAudioTTS:
+    """TTS Audio endpoint tests"""
+    
+    def test_get_slide_audio(self):
+        """Test GET /api/audio/slide/{lesson_id}/{slide_index}"""
+        response = requests.get(f"{BASE_URL}/api/audio/slide/L1_1/0")
+        assert response.status_code == 200
+        assert response.headers["content-type"] == "audio/mp3"
+        # Verify audio content is not empty
+        assert len(response.content) > 0
+        print(f"Audio size: {len(response.content)} bytes")
         
-    def test_confirm_payment(self):
-        """Test POST /api/payment/confirm"""
+    def test_audio_caching(self):
+        """Test that second call returns cached audio"""
+        # First call - generates audio
+        response1 = requests.get(f"{BASE_URL}/api/audio/slide/L1_1/0")
+        assert response1.status_code == 200
+        audio1_size = len(response1.content)
+        
+        # Second call - should return cached audio
+        response2 = requests.get(f"{BASE_URL}/api/audio/slide/L1_1/0")
+        assert response2.status_code == 200
+        audio2_size = len(response2.content)
+        
+        # Both should be same size (cached)
+        assert audio1_size == audio2_size
+        print(f"Cache working: both calls returned {audio1_size} bytes")
+        
+    def test_audio_invalid_lesson(self):
+        """Test audio endpoint with invalid lesson ID"""
+        response = requests.get(f"{BASE_URL}/api/audio/slide/INVALID_LESSON/0")
+        assert response.status_code == 404
+        
+    def test_audio_invalid_slide_index(self):
+        """Test audio endpoint with invalid slide index"""
+        response = requests.get(f"{BASE_URL}/api/audio/slide/L1_1/999")
+        assert response.status_code == 404
+
+
+class TestAdmin:
+    """Admin endpoint tests"""
+    
+    def test_admin_activate_user(self):
+        """Test POST /api/admin/activate-user"""
         # Register new user
         import time
-        unique_email = f"TEST_paymentuser_{int(time.time())}@example.com"
+        unique_email = f"TEST_activateuser_{int(time.time())}@example.com"
         reg_res = requests.post(f"{BASE_URL}/api/auth/register", json={
             "email": unique_email,
             "password": "testpass123",
-            "name": "Payment User"
+            "name": "Activate User"
+        })
+        assert reg_res.status_code == 200
+        user_token = reg_res.json()["access_token"]
+        
+        # Verify user is not paid
+        me_res = requests.get(f"{BASE_URL}/api/auth/me", headers={
+            "Authorization": f"Bearer {user_token}"
+        })
+        assert me_res.json()["user"]["is_paid"] == False
+        
+        # Login as admin
+        admin_login = requests.post(f"{BASE_URL}/api/auth/login", json={
+            "email": "admin@pmhouse.com",
+            "password": "PMHouse@2024"
+        })
+        admin_token = admin_login.json()["access_token"]
+        
+        # Activate user
+        activate_res = requests.post(f"{BASE_URL}/api/admin/activate-user",
+            headers={"Authorization": f"Bearer {admin_token}", "Content-Type": "application/json"},
+            json={"email": unique_email}
+        )
+        assert activate_res.status_code == 200
+        assert activate_res.json()["success"] == True
+        
+        # Verify user is now paid
+        me_res2 = requests.get(f"{BASE_URL}/api/auth/me", headers={
+            "Authorization": f"Bearer {user_token}"
+        })
+        assert me_res2.json()["user"]["is_paid"] == True
+        
+    def test_admin_activate_user_non_admin(self):
+        """Test admin endpoint with non-admin user"""
+        # Register new user
+        import time
+        unique_email = f"TEST_nonadmin_{int(time.time())}@example.com"
+        reg_res = requests.post(f"{BASE_URL}/api/auth/register", json={
+            "email": unique_email,
+            "password": "testpass123",
+            "name": "Non Admin"
         })
         token = reg_res.json()["access_token"]
         
-        # Confirm payment
-        response = requests.post(f"{BASE_URL}/api/payment/confirm", 
+        # Try to activate user with non-admin token
+        response = requests.post(f"{BASE_URL}/api/admin/activate-user",
             headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
-            json={"transaction_id": "test_transaction_123"}
+            json={"email": "test@example.com"}
         )
-        assert response.status_code == 200
-        data = response.json()
-        assert data["success"] == True
-        assert data["is_paid"] == True
-        
-        # Verify user is now paid
-        me_res = requests.get(f"{BASE_URL}/api/auth/me", headers={
-            "Authorization": f"Bearer {token}"
-        })
-        assert me_res.json()["user"]["is_paid"] == True
+        assert response.status_code == 403
 
 
 class TestCertificate:

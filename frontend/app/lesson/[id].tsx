@@ -1,9 +1,10 @@
 import { useEffect, useState, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Dimensions, FlatList } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Dimensions, FlatList, Platform } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useAuth } from '../_layout';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { Audio } from 'expo-av';
 
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
 const { width } = Dimensions.get('window');
@@ -15,9 +16,15 @@ export default function LessonViewer() {
   const [lesson, setLesson] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [currentSlide, setCurrentSlide] = useState(0);
+  const [audioPlaying, setAudioPlaying] = useState(false);
+  const [audioLoading, setAudioLoading] = useState(false);
   const flatListRef = useRef<FlatList>(null);
+  const soundRef = useRef<Audio.Sound | null>(null);
 
-  useEffect(() => { fetchLesson(); }, [id]);
+  useEffect(() => { fetchLesson(); return () => { stopAudio(); }; }, [id]);
+
+  // Stop audio when slide changes
+  useEffect(() => { stopAudio(); }, [currentSlide]);
 
   const fetchLesson = async () => {
     try {
@@ -30,6 +37,51 @@ export default function LessonViewer() {
       }
     } catch (e) { console.log(e); }
     setLoading(false);
+  };
+
+  const stopAudio = async () => {
+    try {
+      if (soundRef.current) {
+        await soundRef.current.stopAsync();
+        await soundRef.current.unloadAsync();
+        soundRef.current = null;
+      }
+    } catch (e) { /* ignore */ }
+    setAudioPlaying(false);
+  };
+
+  const playSlideAudio = async () => {
+    if (audioPlaying) {
+      await stopAudio();
+      return;
+    }
+
+    setAudioLoading(true);
+    try {
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: false,
+      });
+
+      const audioUrl = `${BACKEND_URL}/api/audio/slide/${id}/${currentSlide}`;
+      const { sound } = await Audio.Sound.createAsync(
+        { uri: audioUrl },
+        { shouldPlay: true }
+      );
+      soundRef.current = sound;
+      setAudioPlaying(true);
+
+      sound.setOnPlaybackStatusUpdate((status) => {
+        if (status.isLoaded && status.didJustFinish) {
+          setAudioPlaying(false);
+          soundRef.current = null;
+        }
+      });
+    } catch (e) {
+      console.log('Audio play error:', e);
+    }
+    setAudioLoading(false);
   };
 
   const markComplete = async () => {
@@ -92,7 +144,7 @@ export default function LessonViewer() {
     <SafeAreaView style={styles.container}>
       {/* Top Bar */}
       <View style={styles.topBar}>
-        <TouchableOpacity testID="lesson-back-btn" onPress={() => router.back()} style={styles.topBtn}>
+        <TouchableOpacity testID="lesson-back-btn" onPress={() => { stopAudio(); router.back(); }} style={styles.topBtn}>
           <Ionicons name="arrow-forward" size={22} color="#0F172A" />
         </TouchableOpacity>
         <View style={styles.topCenter}>
@@ -100,6 +152,28 @@ export default function LessonViewer() {
           <Text style={styles.topSub}>{lesson.duration_minutes} دقائق</Text>
         </View>
         <View style={{ width: 40 }} />
+      </View>
+
+      {/* Audio Player Bar */}
+      <View style={styles.audioBar}>
+        <TouchableOpacity
+          testID="play-audio-btn"
+          style={[styles.audioBtn, audioPlaying && styles.audioBtnActive]}
+          onPress={playSlideAudio}
+          disabled={audioLoading}
+        >
+          {audioLoading ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <Ionicons name={audioPlaying ? 'pause' : 'play'} size={20} color="#fff" />
+          )}
+        </TouchableOpacity>
+        <View style={styles.audioInfo}>
+          <Text style={styles.audioLabel}>
+            {audioLoading ? 'جاري تحميل الصوت...' : audioPlaying ? '🔊 يتم تشغيل الشرح الصوتي' : '🎧 اضغط لسماع شرح الشريحة'}
+          </Text>
+          <Text style={styles.audioSub}>صوت AI باللغة العربية</Text>
+        </View>
       </View>
 
       {/* Progress Dots */}
@@ -161,11 +235,24 @@ const styles = StyleSheet.create({
   topCenter: { flex: 1, alignItems: 'center' },
   topTitle: { fontSize: 16, fontWeight: '700', color: '#0F172A' },
   topSub: { fontSize: 12, color: '#64748B', marginTop: 2 },
+  audioBar: {
+    flexDirection: 'row-reverse', alignItems: 'center', gap: 12,
+    marginHorizontal: 16, padding: 12, borderRadius: 14,
+    backgroundColor: '#0F172A',
+  },
+  audioBtn: {
+    width: 44, height: 44, borderRadius: 22,
+    backgroundColor: '#1D4ED8', alignItems: 'center', justifyContent: 'center',
+  },
+  audioBtnActive: { backgroundColor: '#EA580C' },
+  audioInfo: { flex: 1 },
+  audioLabel: { fontSize: 14, fontWeight: '600', color: '#fff', textAlign: 'right' },
+  audioSub: { fontSize: 11, color: '#94A3B8', textAlign: 'right', marginTop: 2 },
   dots: { flexDirection: 'row-reverse', justifyContent: 'center', gap: 8, paddingVertical: 8 },
   dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#E2E8F0' },
   dotActive: { backgroundColor: '#1D4ED8', width: 24 },
   dotDone: { backgroundColor: '#16A34A' },
-  slide: { backgroundColor: '#fff', borderRadius: 16, padding: 24, marginRight: 0, borderWidth: 1, borderColor: '#E2E8F0', flex: 1 },
+  slide: { backgroundColor: '#fff', borderRadius: 16, padding: 24, borderWidth: 1, borderColor: '#E2E8F0', flex: 1 },
   slideHeader: { marginBottom: 16 },
   slideNumber: { fontSize: 13, color: '#94A3B8', textAlign: 'right' },
   slideTitle: { fontSize: 22, fontWeight: '800', color: '#0F172A', textAlign: 'right', marginBottom: 16, lineHeight: 32 },

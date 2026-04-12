@@ -15,6 +15,8 @@ from datetime import datetime, timezone, timedelta
 from pydantic import BaseModel
 from typing import Optional
 import pathlib
+import base64
+from fastapi.responses import Response
 
 # MongoDB connection
 mongo_url = os.environ['MONGO_URL']
@@ -332,23 +334,69 @@ async def get_progress(request: Request):
         "is_course_complete": completed >= total_lessons
     }
 
-# ========== Payment Routes ==========
-@api_router.get("/payment/link")
-async def get_payment_link():
-    return {"paypal_link": PAYPAL_LINK}
+# ========== Audio TTS Routes ==========
+@api_router.get("/audio/slide/{lesson_id}/{slide_index}")
+async def get_slide_audio(lesson_id: str, slide_index: int, request: Request):
+    """Generate or retrieve cached TTS audio for a slide"""
+    # Check cache first
+    cache_key = f"{lesson_id}_{slide_index}"
+    cached = await db.audio_cache.find_one({"cache_key": cache_key}, {"_id": 0})
+    if cached and cached.get("audio_base64"):
+        audio_bytes = base64.b64decode(cached["audio_base64"])
+        return Response(content=audio_bytes, media_type="audio/mp3",
+                       headers={"Cache-Control": "public, max-age=86400"})
 
-@api_router.post("/payment/confirm")
-async def confirm_payment(confirmation: PaymentConfirmation, request: Request):
-    user = await get_current_user(request)
-    await db.users.update_one(
-        {"_id": ObjectId(user["id"])},
-        {"$set": {
-            "is_paid": True,
-            "payment_date": datetime.now(timezone.utc).isoformat(),
-            "payment_transaction_id": confirmation.transaction_id
-        }}
-    )
-    return {"success": True, "is_paid": True}
+    # Get lesson and slide content
+    lesson = await db.lessons.find_one({"id": lesson_id}, {"_id": 0})
+    if not lesson:
+        raise HTTPException(status_code=404, detail="Lesson not found")
+    slides = lesson.get("slides", [])
+    if slide_index < 0 or slide_index >= len(slides):
+        raise HTTPException(status_code=404, detail="Slide not found")
+
+    slide = slides[slide_index]
+    # Build narration text
+    narration = f"{slide['title']}. {slide.get('content', '')}. "
+    key_points = slide.get('key_points', [])
+    if key_points:
+        narration += "النقاط الرئيسية: " + "، ".join(key_points) + "."
+
+    # Limit to 4096 chars
+    narration = narration[:4096]
+
+    try:
+        from emergentintegrations.llm.openai import OpenAITextToSpeech
+        tts = OpenAITextToSpeech(api_key=os.getenv("EMERGENT_LLM_KEY"))
+        audio_bytes = await tts.generate_speech(
+            text=narration,
+            model="tts-1",
+            voice="onyx",
+            speed=1.0,
+            response_format="mp3"
+        )
+        # Cache the audio
+        audio_b64 = base64.b64encode(audio_bytes).decode("utf-8")
+        await db.audio_cache.update_one(
+            {"cache_key": cache_key},
+            {"$set": {"cache_key": cache_key, "audio_base64": audio_b64, "created_at": datetime.now(timezone.utc).isoformat()}},
+            upsert=True
+        )
+        return Response(content=audio_bytes, media_type="audio/mp3",
+                       headers={"Cache-Control": "public, max-age=86400"})
+    except Exception as e:
+        logger.error(f"TTS generation failed: {e}")
+        raise HTTPException(status_code=500, detail=f"فشل توليد الصوت: {str(e)}")
+
+# ========== Payment Routes ==========
+WHATSAPP_NUMBER = "201005394312"
+
+@api_router.get("/payment/info")
+async def get_payment_info():
+    return {
+        "paypal_link": PAYPAL_LINK,
+        "whatsapp_number": WHATSAPP_NUMBER,
+        "whatsapp_link": f"https://wa.me/{WHATSAPP_NUMBER}"
+    }
 
 # ========== Certificate Routes ==========
 @api_router.get("/certificate")
