@@ -8,36 +8,34 @@ import { Audio } from 'expo-av';
 
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
 
-// Marquee component - scrolls text synced with audio progress
-function MarqueeText({ text, playing, progress }: { text: string; playing: boolean; progress: number }) {
-  const scrollRef = useRef<ScrollView>(null);
-  const textWidthRef = useRef(0);
-  const containerWidthRef = useRef(0);
+// Animated caption - smooth scroll synced with audio like YouTube
+function AnimatedCaption({ text, progress }: { text: string; progress: number }) {
+  const scrollX = useRef(new Animated.Value(0)).current;
+  const textW = useRef(0);
+  const boxW = useRef(0);
 
   useEffect(() => {
-    if (scrollRef.current && playing && textWidthRef.current > containerWidthRef.current) {
-      const maxScroll = textWidthRef.current - containerWidthRef.current;
-      const scrollTo = maxScroll * progress;
-      scrollRef.current.scrollTo({ x: scrollTo, animated: true });
+    if (textW.current > boxW.current) {
+      const max = textW.current - boxW.current + 20;
+      Animated.timing(scrollX, {
+        toValue: -(max * progress),
+        duration: 300,
+        useNativeDriver: true,
+      }).start();
     }
-  }, [progress, playing]);
+  }, [progress]);
 
   return (
-    <View style={styles.arMarqueeBar}
-      onLayout={(e) => { containerWidthRef.current = e.nativeEvent.layout.width; }}>
-      <ScrollView
-        ref={scrollRef}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        scrollEnabled={false}
-      >
+    <View style={styles.captionBar} onLayout={(e) => { boxW.current = e.nativeEvent.layout.width; }}>
+      <Animated.View style={{ flexDirection: 'row', transform: [{ translateX: scrollX }] }}>
         <Text
-          style={styles.arMarqueeText}
-          onLayout={(e) => { textWidthRef.current = e.nativeEvent.layout.width; }}
+          style={styles.captionText}
+          onLayout={(e) => { textW.current = e.nativeEvent.layout.width; }}
+          numberOfLines={1}
         >
           {text}
         </Text>
-      </ScrollView>
+      </Animated.View>
     </View>
   );
 }
@@ -293,11 +291,10 @@ export default function LessonViewer() {
         </View>
       </View>
 
-      {/* Arabic Translation Marquee - only in English mode */}
+      {/* Arabic Caption - synced with English audio like YouTube */}
       {lang === 'en' && (
-        <MarqueeText
+        <AnimatedCaption
           text={`${arTitle} — ${arContent}${arKeyPoints.length > 0 ? ' ◆ ' + arKeyPoints.join(' ◆ ') : ''}`}
-          playing={audioPlaying}
           progress={audioProgress}
         />
       )}
@@ -377,8 +374,8 @@ const styles = StyleSheet.create({
   speedBtnText: { fontSize: 13, fontWeight: '700', color: '#fff' },
   audioProgressBg: { height: 3, backgroundColor: 'rgba(255,255,255,0.2)' },
   audioProgressFill: { height: 3, backgroundColor: '#D4A843' },
-  arMarqueeBar: { marginHorizontal: 16, marginTop: 4, backgroundColor: 'rgba(27,54,93,0.06)', borderRadius: 6, paddingVertical: 6, paddingHorizontal: 8, height: 30, justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(27,54,93,0.1)' },
-  arMarqueeText: { fontSize: 13, color: '#1B365D', fontWeight: '500', writingDirection: 'rtl', textAlign: 'right', lineHeight: 18 },
+  captionBar: { marginHorizontal: 16, marginTop: 4, backgroundColor: 'rgba(0,0,0,0.75)', borderRadius: 6, paddingVertical: 8, paddingHorizontal: 12, height: 34, justifyContent: 'center', overflow: 'hidden' },
+  captionText: { fontSize: 14, color: '#fff', fontWeight: '500', writingDirection: 'rtl', textAlign: 'right' },
   dots: { justifyContent: 'center', gap: 8, paddingVertical: 8 },
   dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#D0D0CC' },
   dotActive: { backgroundColor: '#1B365D', width: 24 },
