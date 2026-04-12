@@ -205,7 +205,7 @@ export default function LessonViewer() {
                 : t('اضغط لتشغيل الصوت أو سيعمل تلقائياً', 'Tap to play or auto-plays')}
           </Text>
           <Text style={[styles.audioSub, { textAlign }]}>
-            {lang === 'en' ? 'Guy — American English' : 'صوت عمر - لهجة مصرية'}
+            {lang === 'en' ? 'Professional American Narrator' : 'راوي محترف - عربي'}
           </Text>
         </View>
       </View>
