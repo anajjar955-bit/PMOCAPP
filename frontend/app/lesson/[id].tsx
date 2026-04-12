@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, ScrollView, Animated } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, ScrollView } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useAuth, useLang } from '../_layout';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -8,34 +8,47 @@ import { Audio } from 'expo-av';
 
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
 
-// Animated caption - smooth scroll synced with audio like YouTube
+// Caption component - auto-scrolls synced with audio progress
 function AnimatedCaption({ text, progress }: { text: string; progress: number }) {
-  const scrollX = useRef(new Animated.Value(0)).current;
+  const scrollRef = useRef<ScrollView>(null);
+  const [maxScroll, setMaxScroll] = useState(0);
+  const containerW = useRef(0);
   const textW = useRef(0);
-  const boxW = useRef(0);
+
+  const updateMaxScroll = () => {
+    if (textW.current > containerW.current) {
+      setMaxScroll(textW.current - containerW.current + 30);
+    }
+  };
 
   useEffect(() => {
-    if (textW.current > boxW.current) {
-      const max = textW.current - boxW.current + 20;
-      Animated.timing(scrollX, {
-        toValue: -(max * progress),
-        duration: 300,
-        useNativeDriver: true,
-      }).start();
+    if (scrollRef.current && maxScroll > 0 && progress > 0) {
+      const target = maxScroll * progress;
+      scrollRef.current.scrollTo({ x: target, animated: true });
+    } else if (scrollRef.current && progress === 0) {
+      scrollRef.current.scrollTo({ x: 0, animated: false });
     }
-  }, [progress]);
+  }, [progress, maxScroll]);
 
   return (
-    <View style={styles.captionBar} onLayout={(e) => { boxW.current = e.nativeEvent.layout.width; }}>
-      <Animated.View style={{ flexDirection: 'row', transform: [{ translateX: scrollX }] }}>
+    <View
+      style={styles.captionBar}
+      onLayout={(e) => { containerW.current = e.nativeEvent.layout.width; updateMaxScroll(); }}
+    >
+      <ScrollView
+        ref={scrollRef}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        scrollEnabled={true}
+        contentContainerStyle={{ flexDirection: 'row-reverse' }}
+      >
         <Text
           style={styles.captionText}
-          onLayout={(e) => { textW.current = e.nativeEvent.layout.width; }}
-          numberOfLines={1}
+          onLayout={(e) => { textW.current = e.nativeEvent.layout.width; updateMaxScroll(); }}
         >
           {text}
         </Text>
-      </Animated.View>
+      </ScrollView>
     </View>
   );
 }
