@@ -440,16 +440,14 @@ async def get_slide_audio(lesson_id: str, slide_index: int, request: Request):
 
     # Step 1: Generate professional Egyptian Arabic narration using GPT
     try:
-        from emergentintegrations.llm.openai import LlmChat, UserMessage
-        import hashlib
-        sid = f"ak_{hashlib.md5(cache_key.encode()).hexdigest()[:8]}"
-        chat = LlmChat(
-            api_key=os.getenv("EMERGENT_LLM_KEY"),
-            session_id=sid,
-            system_message="انت محاضر مصري محترف. بتشرح بعامية مصرية بسيطة وسلسة."
-        )
-        chat = chat.with_model("openai", "gpt-4o-mini")
-        prompt = f"""اكتب سكريبت صوتي قصير لشرح ده:
+        from openai import AsyncOpenAI
+        import re
+        openai_client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        response = await openai_client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "انت محاضر مصري محترف. بتشرح بعامية مصرية بسيطة وسلسة."},
+                {"role": "user", "content": f"""اكتب سكريبت صوتي قصير لشرح ده:
 
 {slide_content}
 
@@ -464,11 +462,12 @@ async def get_slide_audio(lesson_id: str, slide_index: int, request: Request):
 - اختم بجملة واحدة ملخصة
 - ارقام بالحروف
 - خمسين كلمة فقط
-- بدون عناوين او نقاط"""
-
-        narration = await chat.send_message(UserMessage(text=prompt))
-        narration = narration.strip()[:4096]
-        import re
+- بدون عناوين او نقاط"""}
+            ],
+            max_tokens=500,
+            temperature=0.8
+        )
+        narration = response.choices[0].message.content.strip()[:4096]
         # Aggressive cleaning
         narration = re.sub(r'[آأإ]{2,}ه?', '', narration)
         narration = re.sub(r'ي{2,}ه?', '', narration)
@@ -567,16 +566,13 @@ async def get_slide_audio_en(lesson_id: str, slide_index: int, request: Request)
 
     # Step 1: Generate professional American lecturer narration using GPT
     try:
-        from emergentintegrations.llm.openai import LlmChat, UserMessage
-        import hashlib
-        sid = f"en_{hashlib.md5(cache_key.encode()).hexdigest()[:8]}"
-        chat = LlmChat(
-            api_key=os.getenv("EMERGENT_LLM_KEY"),
-            session_id=sid,
-            system_message="You are a professional American project management instructor delivering an engaging PMI-PMO CP exam prep lecture."
-        )
-        chat = chat.with_model("openai", "gpt-4o-mini")
-        prompt = f"""Write a spoken narration script for this slide content as a professional American PMI lecturer:
+        from openai import AsyncOpenAI
+        openai_client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        response = await openai_client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "You are a professional American project management instructor delivering an engaging PMI-PMO CP exam prep lecture."},
+                {"role": "user", "content": f"""Write a spoken narration script for this slide content as a professional American PMI lecturer:
 
 {slide_content}
 
@@ -588,10 +584,12 @@ Rules:
 5. Use phrases like: "Here's the key insight", "Think of it this way", "What this really means is", "In practice"
 6. Keep it 60 to 80 words - concise and impactful
 7. Write as continuous speech - no bullet points or headings
-8. Use simple, clear American English"""
-
-        narration = await chat.send_message(UserMessage(text=prompt))
-        narration = narration.strip()[:4096]
+8. Use simple, clear American English"""}
+            ],
+            max_tokens=500,
+            temperature=0.8
+        )
+        narration = response.choices[0].message.content.strip()[:4096]
         logger.info(f"EN Narration for {cache_key}: {narration[:80]}...")
     except Exception as e:
         logger.error(f"GPT EN narration failed: {e}")
