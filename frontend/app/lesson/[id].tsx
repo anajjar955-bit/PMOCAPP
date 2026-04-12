@@ -23,6 +23,7 @@ export default function LessonViewer() {
   const isMountedRef = useRef(true);
   const [playbackSpeed, setPlaybackSpeed] = useState(1.0);
   const SPEED_OPTIONS = [1.0, 1.25, 1.5, 2.0];
+  const [audioProgress, setAudioProgress] = useState(0);
 
   const setCurrentSlide = (val: number) => {
     currentSlideRef.current = val;
@@ -94,18 +95,23 @@ export default function LessonViewer() {
 
       sound.setOnPlaybackStatusUpdate((status) => {
         if (!isMountedRef.current) return;
-        if (status.isLoaded && status.didJustFinish) {
-          setAudioPlaying(false);
-          soundRef.current = null;
-          const currentIdx = currentSlideRef.current;
-          if (lesson && currentIdx < (lesson.slides?.length || 0) - 1) {
-            // Auto-advance to next slide
-            const nextIdx = currentIdx + 1;
-            goToSlideAndPlay(nextIdx);
-          } else if (lesson) {
-            // Last slide finished - auto-advance to next lesson
-            markComplete();
-            autoAdvanceToNextLesson();
+        if (status.isLoaded) {
+          // Update progress bar
+          if (status.durationMillis && status.positionMillis) {
+            setAudioProgress(status.positionMillis / status.durationMillis);
+          }
+          if (status.didJustFinish) {
+            setAudioPlaying(false);
+            setAudioProgress(0);
+            soundRef.current = null;
+            const currentIdx = currentSlideRef.current;
+            if (lesson && currentIdx < (lesson.slides?.length || 0) - 1) {
+              const nextIdx = currentIdx + 1;
+              goToSlideAndPlay(nextIdx);
+            } else if (lesson) {
+              markComplete();
+              autoAdvanceToNextLesson();
+            }
           }
         }
       });
@@ -222,24 +228,30 @@ export default function LessonViewer() {
         <View style={{ width: 40 }} />
       </View>
 
-      <View style={[styles.audioBar, { flexDirection: rowDir }]}>
-        <TouchableOpacity testID="play-audio-btn" style={[styles.audioBtn, audioPlaying && styles.audioBtnActive]}
-          onPress={toggleAudio} disabled={audioLoading}>
-          {audioLoading ? <ActivityIndicator size="small" color="#fff" /> :
-            <Ionicons name={audioPlaying ? 'pause' : 'play'} size={20} color="#fff" />}
-        </TouchableOpacity>
-        <View style={styles.audioInfo}>
-          <Text style={[styles.audioLabel, { textAlign }]}>
-            {audioLoading
-              ? t('جاري التحميل...', 'Loading...')
-              : audioPlaying
-                ? t('الصوت شغال', 'Playing')
-                : t('اضغط لتشغيل الصوت أو سيعمل تلقائياً', 'Tap to play or auto-plays')}
-          </Text>
+      <View style={styles.audioBar}>
+        <View style={[styles.audioControls, { flexDirection: rowDir }]}>
+          <TouchableOpacity testID="play-audio-btn" style={[styles.audioBtn, audioPlaying && styles.audioBtnActive]}
+            onPress={toggleAudio} disabled={audioLoading}>
+            {audioLoading ? <ActivityIndicator size="small" color="#fff" /> :
+              <Ionicons name={audioPlaying ? 'pause' : 'play'} size={20} color="#fff" />}
+          </TouchableOpacity>
+          <View style={styles.audioInfo}>
+            <Text style={[styles.audioLabel, { textAlign }]}>
+              {audioLoading
+                ? t('جاري التحميل...', 'Loading...')
+                : audioPlaying
+                  ? t('الصوت شغال', 'Playing')
+                  : t('اضغط لتشغيل الصوت أو سيعمل تلقائياً', 'Tap to play or auto-plays')}
+            </Text>
+          </View>
+          <TouchableOpacity style={styles.speedBtn} onPress={cycleSpeed}>
+            <Text style={styles.speedBtnText}>{playbackSpeed}x</Text>
+          </TouchableOpacity>
         </View>
-        <TouchableOpacity style={styles.speedBtn} onPress={cycleSpeed}>
-          <Text style={styles.speedBtnText}>{playbackSpeed}x</Text>
-        </TouchableOpacity>
+        {/* Audio Progress Bar */}
+        <View style={styles.audioProgressBg}>
+          <View style={[styles.audioProgressFill, { width: `${audioProgress * 100}%` }]} />
+        </View>
       </View>
 
       <View style={[styles.dots, { flexDirection: rowDir }]}>
@@ -307,13 +319,16 @@ const styles = StyleSheet.create({
   topCenter: { flex: 1, alignItems: 'center' },
   topTitle: { fontSize: 16, fontWeight: '700', color: '#1B365D' },
   topSub: { fontSize: 12, color: '#666', marginTop: 2 },
-  audioBar: { alignItems: 'center', gap: 12, marginHorizontal: 16, padding: 12, borderRadius: 10, backgroundColor: '#1B365D' },
+  audioBar: { marginHorizontal: 16, borderRadius: 10, backgroundColor: '#1B365D', overflow: 'hidden' },
+  audioControls: { alignItems: 'center', gap: 12, padding: 12 },
   audioBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#D4A843', alignItems: 'center', justifyContent: 'center' },
   audioBtnActive: { backgroundColor: '#EA6A0B' },
   audioInfo: { flex: 1 },
   audioLabel: { fontSize: 13, fontWeight: '600', color: '#fff' },
   speedBtn: { backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 14 },
   speedBtnText: { fontSize: 13, fontWeight: '700', color: '#fff' },
+  audioProgressBg: { height: 3, backgroundColor: 'rgba(255,255,255,0.2)' },
+  audioProgressFill: { height: 3, backgroundColor: '#D4A843' },
   dots: { justifyContent: 'center', gap: 8, paddingVertical: 8 },
   dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#D0D0CC' },
   dotActive: { backgroundColor: '#1B365D', width: 24 },

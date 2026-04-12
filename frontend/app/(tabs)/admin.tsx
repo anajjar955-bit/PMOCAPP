@@ -82,6 +82,30 @@ export default function AdminPanel() {
     copyText(msg, 'msg_' + code);
   };
 
+  const deleteUser = async (email: string) => {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/admin/users/${encodeURIComponent(email)}`, {
+        method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) { fetchUsers(); }
+    } catch (e) {}
+  };
+
+  const [editingCode, setEditingCode] = useState('');
+  const [newCodeEmail, setNewCodeEmail] = useState('');
+
+  const reassignCode = async (code: string) => {
+    if (!newCodeEmail.trim()) return;
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/admin/codes/${code}/reassign`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ email: newCodeEmail.trim() }),
+      });
+      if (res.ok) { setEditingCode(''); setNewCodeEmail(''); fetchCodes(); }
+    } catch (e) {}
+  };
+
   const exportExcel = async () => {
     const url = `${BACKEND_URL}/api/admin/export-users`;
     if (Platform.OS === 'web') {
@@ -195,6 +219,10 @@ export default function AdminPanel() {
                     </View>
                   </View>
                   <Text style={styles.userDate}>تسجيل: {u.created_at?.split('T')[0]}</Text>
+                  <TouchableOpacity style={styles.deleteBtn} onPress={() => deleteUser(u.email)}>
+                    <Ionicons name="trash-outline" size={16} color="#DC2626" />
+                    <Text style={styles.deleteBtnText}>حذف المتدرب</Text>
+                  </TouchableOpacity>
                 </View>
               ))
             }
@@ -238,6 +266,23 @@ export default function AdminPanel() {
                   <TouchableOpacity onPress={() => copyText(c.code, c.code)}><Ionicons name={copied === c.code ? 'checkmark' : 'copy-outline'} size={16} color="#64748B" /></TouchableOpacity>
                 </View>
                 <Text style={styles.codeCardEmail}>{c.email} • {c.used ? 'مستخدم ✓' : 'نشط'} • {c.created_at?.split('T')[0]}</Text>
+                {editingCode === c.code ? (
+                  <View style={styles.reassignRow}>
+                    <TextInput style={styles.reassignInput} value={newCodeEmail} onChangeText={setNewCodeEmail}
+                      placeholder="الإيميل الجديد" placeholderTextColor="#94A3B8" keyboardType="email-address" autoCapitalize="none" />
+                    <TouchableOpacity style={styles.reassignBtn} onPress={() => reassignCode(c.code)}>
+                      <Ionicons name="checkmark" size={18} color="#fff" />
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.reassignCancel} onPress={() => { setEditingCode(''); setNewCodeEmail(''); }}>
+                      <Ionicons name="close" size={18} color="#DC2626" />
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <TouchableOpacity style={styles.reassignLink} onPress={() => { setEditingCode(c.code); setNewCodeEmail(c.email); }}>
+                    <Ionicons name="swap-horizontal" size={14} color="#1D4ED8" />
+                    <Text style={styles.reassignLinkText}>تغيير الإيميل</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             ))}
           </>
@@ -316,6 +361,14 @@ const styles = StyleSheet.create({
   miniBar: { height: 4, backgroundColor: '#E2E8F0', borderRadius: 2, marginBottom: 4 },
   miniFill: { height: 4, backgroundColor: '#1D4ED8', borderRadius: 2 },
   userDate: { fontSize: 11, color: '#94A3B8', textAlign: 'right', marginTop: 8 },
+  deleteBtn: { flexDirection: 'row-reverse', alignItems: 'center', gap: 4, marginTop: 8, alignSelf: 'flex-end', backgroundColor: '#FEF2F2', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
+  deleteBtnText: { fontSize: 12, color: '#DC2626', fontWeight: '600' },
+  reassignRow: { flexDirection: 'row', gap: 6, marginTop: 8 },
+  reassignInput: { flex: 1, borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, fontSize: 13, color: '#0F172A', textAlign: 'right' },
+  reassignBtn: { width: 34, height: 34, borderRadius: 8, backgroundColor: '#16A34A', alignItems: 'center', justifyContent: 'center' },
+  reassignCancel: { width: 34, height: 34, borderRadius: 8, backgroundColor: '#FEF2F2', alignItems: 'center', justifyContent: 'center' },
+  reassignLink: { flexDirection: 'row-reverse', alignItems: 'center', gap: 4, marginTop: 6, alignSelf: 'flex-end' },
+  reassignLinkText: { fontSize: 12, color: '#1D4ED8', fontWeight: '600' },
   generateCard: { backgroundColor: '#fff', marginHorizontal: 16, marginTop: 16, padding: 16, borderRadius: 14, borderWidth: 2, borderColor: '#1D4ED8' },
   sectionTitle: { fontSize: 16, fontWeight: '700', color: '#0F172A', textAlign: 'right', marginBottom: 12 },
   inputRow: { flexDirection: 'row', gap: 10 },

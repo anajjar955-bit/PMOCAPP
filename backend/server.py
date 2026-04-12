@@ -737,6 +737,33 @@ async def export_users_excel(request: Request):
 # ========== Payment Routes ==========
 WHATSAPP_NUMBER = os.environ.get('WHATSAPP_NUMBER', '201005394312')
 
+@api_router.delete("/admin/users/{user_email}")
+async def delete_user(user_email: str, request: Request):
+    admin = await get_current_user(request)
+    if admin.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Admin only")
+    result = await db.users.delete_one({"email": user_email, "role": {"$ne": "admin"}})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="User not found or is admin")
+    return {"message": "User deleted", "email": user_email}
+
+@api_router.put("/admin/codes/{code}/reassign")
+async def reassign_code(code: str, request: Request):
+    admin = await get_current_user(request)
+    if admin.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Admin only")
+    body = await request.json()
+    new_email = body.get("email", "").strip()
+    if not new_email:
+        raise HTTPException(status_code=400, detail="Email required")
+    result = await db.activation_codes.update_one(
+        {"code": code},
+        {"$set": {"email": new_email, "used": False}}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Code not found")
+    return {"message": "Code reassigned", "code": code, "new_email": new_email}
+
 @api_router.get("/payment/info")
 async def get_payment_info():
     return {
