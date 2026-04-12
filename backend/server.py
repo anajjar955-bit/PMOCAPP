@@ -337,9 +337,9 @@ async def get_progress(request: Request):
 # ========== Audio TTS Routes ==========
 @api_router.get("/audio/slide/{lesson_id}/{slide_index}")
 async def get_slide_audio(lesson_id: str, slide_index: int, request: Request):
-    """Generate or retrieve cached TTS audio for a slide"""
+    """Generate or retrieve cached TTS audio for a slide with Egyptian Arabic narration"""
     # Check cache first
-    cache_key = f"{lesson_id}_{slide_index}"
+    cache_key = f"{lesson_id}_{slide_index}_v2"
     cached = await db.audio_cache.find_one({"cache_key": cache_key}, {"_id": 0})
     if cached and cached.get("audio_base64"):
         audio_bytes = base64.b64decode(cached["audio_base64"])
@@ -355,30 +355,63 @@ async def get_slide_audio(lesson_id: str, slide_index: int, request: Request):
         raise HTTPException(status_code=404, detail="Slide not found")
 
     slide = slides[slide_index]
-    # Build narration text
-    narration = f"{slide['title']}. {slide.get('content', '')}. "
+    slide_content = f"عنوان الشريحة: {slide['title']}\nالمحتوى: {slide.get('content', '')}\n"
     key_points = slide.get('key_points', [])
     if key_points:
-        narration += "النقاط الرئيسية: " + "، ".join(key_points) + "."
+        slide_content += "النقاط الرئيسية:\n" + "\n".join(f"- {p}" for p in key_points)
 
-    # Limit to 4096 chars
-    narration = narration[:4096]
+    # Step 1: Generate engaging Egyptian Arabic narration using GPT
+    try:
+        from emergentintegrations.llm.openai import LlmChat, UserMessage
+        import hashlib
+        session_id = f"narration_{hashlib.md5(cache_key.encode()).hexdigest()[:8]}"
+        chat = LlmChat(
+            api_key=os.getenv("EMERGENT_LLM_KEY"),
+            session_id=session_id,
+            system_message="أنت مدرب محترف في إدارة المشاريع اسمك أحمد، بتشرح دورة تدريبية للإعداد لاختبار PMI-PMO CP. بتشرح بالعامية المصرية بحماس وتشويق. بتنوع بين الحماس والهدوء عشان الكلام ما يبقاش ممل. بتستخدم أمثلة بسيطة من الحياة العملية."
+        )
+        chat = chat.with_model("openai", "gpt-4o-mini")
+        prompt = f"""اشرح المحتوى ده بأسلوب عامية مصرية متحمسة كأنك بتتكلم في فيديو تدريبي:
 
+{slide_content}
+
+الشروط:
+- اشرح بالعامية المصرية المتحمسة مش الفصحى
+- استخدم عبارات زي "تعالوا نفهم مع بعض"، "يعني ايه الكلام ده؟"، "ركزوا معايا"، "الحكاية ببساطة"
+- نوّع بين الحماس والهدوء
+- اشرح المفاهيم بأمثلة عملية بسيطة
+- خلي الكلام في حدود 120-150 كلمة
+- اكتب كلام متصل كأنك بتتكلم - بدون عناوين أو نقاط"""
+
+        narration = await chat.send_message(UserMessage(text=prompt))
+        narration = narration[:4096]
+        logger.info(f"Generated Egyptian narration for {cache_key}: {narration[:100]}...")
+    except Exception as e:
+        logger.error(f"GPT narration failed: {e}")
+        # Fallback: use slide content directly
+        narration = f"{slide['title']}. {slide.get('content', '')}. "
+        if key_points:
+            narration += "النقاط الرئيسية: " + "، ".join(key_points) + "."
+        narration = narration[:4096]
+
+    # Step 2: Convert narration to speech using TTS
     try:
         from emergentintegrations.llm.openai import OpenAITextToSpeech
         tts = OpenAITextToSpeech(api_key=os.getenv("EMERGENT_LLM_KEY"))
         audio_bytes = await tts.generate_speech(
             text=narration,
-            model="tts-1",
+            model="tts-1-hd",
             voice="onyx",
-            speed=1.0,
+            speed=1.05,
             response_format="mp3"
         )
         # Cache the audio
         audio_b64 = base64.b64encode(audio_bytes).decode("utf-8")
         await db.audio_cache.update_one(
             {"cache_key": cache_key},
-            {"$set": {"cache_key": cache_key, "audio_base64": audio_b64, "created_at": datetime.now(timezone.utc).isoformat()}},
+            {"$set": {"cache_key": cache_key, "audio_base64": audio_b64,
+                      "narration_text": narration,
+                      "created_at": datetime.now(timezone.utc).isoformat()}},
             upsert=True
         )
         return Response(content=audio_bytes, media_type="audio/mp3",

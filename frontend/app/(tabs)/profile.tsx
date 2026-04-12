@@ -1,18 +1,18 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../_layout';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useState } from 'react';
 
 export default function Profile() {
   const { user, logout } = useAuth();
   const router = useRouter();
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
-  const handleLogout = () => {
-    Alert.alert('تسجيل الخروج', 'هل أنت متأكد من تسجيل الخروج؟', [
-      { text: 'إلغاء', style: 'cancel' },
-      { text: 'خروج', style: 'destructive', onPress: async () => { await logout(); router.replace('/'); } },
-    ]);
+  const handleLogout = async () => {
+    await logout();
+    router.replace('/');
   };
 
   return (
@@ -72,10 +72,28 @@ export default function Profile() {
           </View>
         </View>
 
-        <TouchableOpacity testID="logout-btn" style={styles.logoutBtn} onPress={handleLogout}>
+        <TouchableOpacity testID="logout-btn" style={styles.logoutBtn} onPress={() => setShowLogoutConfirm(true)}>
           <Ionicons name="log-out-outline" size={20} color="#DC2626" />
           <Text style={styles.logoutText}>تسجيل الخروج</Text>
         </TouchableOpacity>
+
+        {showLogoutConfirm && (
+          <View style={styles.confirmOverlay}>
+            <View style={styles.confirmBox}>
+              <Ionicons name="log-out-outline" size={32} color="#DC2626" />
+              <Text style={styles.confirmTitle}>تسجيل الخروج</Text>
+              <Text style={styles.confirmMsg}>هل أنت متأكد من تسجيل الخروج؟</Text>
+              <View style={styles.confirmBtns}>
+                <TouchableOpacity testID="confirm-logout-btn" style={styles.confirmYes} onPress={handleLogout}>
+                  <Text style={styles.confirmYesText}>نعم، خروج</Text>
+                </TouchableOpacity>
+                <TouchableOpacity testID="cancel-logout-btn" style={styles.confirmNo} onPress={() => setShowLogoutConfirm(false)}>
+                  <Text style={styles.confirmNoText}>إلغاء</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        )}
 
         <View style={{ height: 32 }} />
       </ScrollView>
@@ -107,4 +125,13 @@ const styles = StyleSheet.create({
   aboutText: { fontSize: 14, color: '#64748B', textAlign: 'center', marginTop: 8, lineHeight: 22 },
   logoutBtn: { flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center', gap: 8, marginHorizontal: 20, marginTop: 16, padding: 14, borderRadius: 14, backgroundColor: '#FEF2F2', borderWidth: 1, borderColor: '#FECACA' },
   logoutText: { fontSize: 16, fontWeight: '600', color: '#DC2626' },
+  confirmOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', zIndex: 999 },
+  confirmBox: { backgroundColor: '#fff', borderRadius: 20, padding: 28, alignItems: 'center', marginHorizontal: 40, width: '80%', maxWidth: 340 },
+  confirmTitle: { fontSize: 20, fontWeight: '800', color: '#0F172A', marginTop: 12 },
+  confirmMsg: { fontSize: 15, color: '#64748B', marginTop: 8, textAlign: 'center' },
+  confirmBtns: { flexDirection: 'row-reverse', gap: 12, marginTop: 20, width: '100%' },
+  confirmYes: { flex: 1, backgroundColor: '#DC2626', paddingVertical: 12, borderRadius: 12, alignItems: 'center' },
+  confirmYesText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  confirmNo: { flex: 1, backgroundColor: '#F1F5F9', paddingVertical: 12, borderRadius: 12, alignItems: 'center' },
+  confirmNoText: { color: '#475569', fontSize: 15, fontWeight: '600' },
 });
