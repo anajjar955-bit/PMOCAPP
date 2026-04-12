@@ -418,7 +418,7 @@ async def get_progress(request: Request):
 @api_router.get("/audio/slide/{lesson_id}/{slide_index}")
 async def get_slide_audio(lesson_id: str, slide_index: int, request: Request):
     """Generate TTS audio with ElevenLabs Egyptian Arabic voice"""
-    cache_key = f"{lesson_id}_{slide_index}_akv3"
+    cache_key = f"{lesson_id}_{slide_index}_akv4"
     cached = await db.audio_cache.find_one({"cache_key": cache_key}, {"_id": 0})
     if cached and cached.get("audio_base64"):
         audio_bytes = base64.b64decode(cached["audio_base64"])
@@ -438,7 +438,7 @@ async def get_slide_audio(lesson_id: str, slide_index: int, request: Request):
     if key_points:
         slide_content += "نقاط: " + " / ".join(key_points)
 
-    # Step 1: Generate clear Arabic narration with precise tashkeel using GPT
+    # Step 1: Generate natural Egyptian Arabic narration (NO tashkeel) using GPT
     try:
         from emergentintegrations.llm.openai import LlmChat, UserMessage
         import hashlib
@@ -446,27 +446,23 @@ async def get_slide_audio(lesson_id: str, slide_index: int, request: Request):
         chat = LlmChat(
             api_key=os.getenv("EMERGENT_LLM_KEY"),
             session_id=sid,
-            system_message="أَنْتَ مُحَاضِرٌ مُحْتَرِفٌ فِي إِدَارَةِ الْمَشَارِيعِ. تَكْتُبُ نُصُوصاً صَوْتِيَّةً بِالْعَرَبِيَّةِ الْفُصْحَى الْمُبَسَّطَةِ. كُلُّ كَلِمَةٍ يَجِبُ أَنْ تَكُونَ مُشَكَّلَةً تَشْكِيلاً كَامِلاً وَدَقِيقاً."
+            system_message="انت مدرب مصري محترف في ادارة المشاريع. بتشرح بالعامية المصرية الطبيعية. اكتب بدون اي تشكيل نهائي."
         )
         chat = chat.with_model("openai", "gpt-4o-mini")
-        prompt = f"""اكْتُبْ نَصّاً صَوْتِيّاً لِشَرْحِ هَذَا الْمُحْتَوَى:
+        prompt = f"""اشرح المحتوى ده كأنك مدرب مصري بتشرح في فيديو تعليمي:
 
 {slide_content}
 
-الْقَوَاعِدُ الصَّارِمَةُ:
-1. اكْتُبْ بِالْعَرَبِيَّةِ الْفُصْحَى الْمُبَسَّطَةِ فَقَطْ
-2. شَكِّلْ كُلَّ كَلِمَةٍ تَشْكِيلاً كَامِلاً (فَتْحَة ضَمَّة كَسْرَة سُكُون شَدَّة تَنْوِين) - هَذَا ضَرُورِيٌّ لِأَنَّ مُحَرِّكَ الصَّوْتِ يَقْرَأُ التَّشْكِيلَ
-3. اسْتَخْدِمْ أُسْلُوبَ مُحَاضِرٍ جَذَّابٍ وَشَيِّقٍ - نَوِّعْ بَيْنَ الْأَسْئِلَةِ وَالتَّعْلِيقَاتِ وَالْأَمْثِلَةِ
-4. ابْدَأْ بِسُؤَالٍ أَوْ عِبَارَةٍ تَجْذِبُ الِانْتِبَاهَ
-5. اسْتَخْدِمْ عِبَارَاتٍ مِثْلَ: تَخَيَّلُوا مَعِي، لَاحِظُوا، وَالْآنَ، هَلْ تَعْلَمُونَ، وَهُنَا يَأْتِي الدَّوْرُ الْمُهِمُّ
-6. اجْعَلِ الشَّرْحَ حَيَوِيّاً كَأَنَّكَ تَتَحَدَّثُ أَمَامَ جُمْهُورٍ
-7. الطُّولُ: 80 إِلَى 120 كَلِمَة
-8. اكْتُبْ نَصّاً مُتَّصِلاً بِدُونِ عَنَاوِينَ أَوْ نِقَاطٍ أَوْ تَرْقِيمٍ
-
-مِثَالٌ عَلَى التَّشْكِيلِ الصَّحِيحِ:
-"مَرْحَباً بِكُمْ! هَلْ تَسَاءَلْتُمْ يَوْماً كَيْفَ تَنْجَحُ الْمُؤَسَّسَاتُ الْكُبْرَى فِي إِدَارَةِ عَشَرَاتِ الْمَشَارِيعِ فِي وَقْتٍ وَاحِدٍ؟"
-
-أَعِدْ كِتَابَةَ كُلِّ كَلِمَةٍ بِتَشْكِيلٍ كَامِلٍ بِدُونِ اسْتِثْنَاءٍ."""
+القواعد:
+1. اكتب بالعامية المصرية الطبيعية زي ما بتتكلم مع صحابك
+2. لا تضع اي تشكيل على اي كلمة - اكتب بدون فتحة وبدون ضمة وبدون كسرة وبدون اي حركات
+3. استخدم كلمات مصرية: دلوقتي، كده، عشان، يعني، بتاع، حاجة، ازاي، ليه، خلينا
+4. خلي الكلام طبيعي زي حد بيتكلم مش بيقرأ
+5. ابدأ بحاجة تجذب الانتباه
+6. اشرح بامثلة عملية من الواقع
+7. اختم بخلاصة سريعة
+8. الطول: 80 الى 120 كلمة
+9. اكتب كلام متصل بدون عناوين او نقاط او ترقيم"""
 
         narration = await chat.send_message(UserMessage(text=prompt))
         narration = narration.strip()[:4096]
@@ -511,6 +507,18 @@ async def get_slide_audio(lesson_id: str, slide_index: int, request: Request):
     except Exception as e:
         logger.error(f"ElevenLabs TTS failed: {e}")
         raise HTTPException(status_code=500, detail=f"فشل توليد الصوت: {str(e)}")
+
+@api_router.get("/audio/subtitle/{lesson_id}/{slide_index}")
+async def get_slide_subtitle(lesson_id: str, slide_index: int, lang: str = "ar"):
+    """Get narration text for subtitle display"""
+    if lang == "en":
+        cache_key = f"{lesson_id}_{slide_index}_en"
+    else:
+        cache_key = f"{lesson_id}_{slide_index}_akv4"
+    cached = await db.audio_cache.find_one({"cache_key": cache_key}, {"_id": 0, "narration_text": 1})
+    if cached and cached.get("narration_text"):
+        return {"text": cached["narration_text"]}
+    return {"text": ""}
 
 @api_router.get("/audio/slide/{lesson_id}/{slide_index}/en")
 async def get_slide_audio_en(lesson_id: str, slide_index: int, request: Request):

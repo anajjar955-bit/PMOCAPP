@@ -21,6 +21,8 @@ export default function LessonViewer() {
   const currentSlideRef = useRef(0);
   const [currentSlide, setCurrentSlideState] = useState(0);
   const isMountedRef = useRef(true);
+  const [subtitleText, setSubtitleText] = useState('');
+  const [showSubtitle, setShowSubtitle] = useState(true);
 
   const setCurrentSlide = (val: number) => {
     currentSlideRef.current = val;
@@ -71,6 +73,16 @@ export default function LessonViewer() {
     if (!isMountedRef.current) return;
 
     setAudioLoading(true);
+    setSubtitleText('');
+    // Fetch subtitle text
+    try {
+      const subRes = await fetch(`${BACKEND_URL}/api/audio/subtitle/${id}/${slideIndex}?lang=${lang}`);
+      if (subRes.ok) {
+        const subData = await subRes.json();
+        if (isMountedRef.current && subData.text) setSubtitleText(subData.text);
+      }
+    } catch (e) { /* subtitle fetch failed, not critical */ }
+
     try {
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: false,
@@ -218,6 +230,25 @@ export default function LessonViewer() {
         ))}
       </View>
 
+      {/* Subtitle Bar */}
+      {showSubtitle && subtitleText ? (
+        <View style={styles.subtitleBar}>
+          <ScrollView style={styles.subtitleScroll} nestedScrollEnabled showsVerticalScrollIndicator={false}>
+            <Text style={[styles.subtitleText, { textAlign, writingDirection: isRTL ? 'rtl' : 'ltr' }]}>
+              {subtitleText}
+            </Text>
+          </ScrollView>
+          <TouchableOpacity style={styles.subtitleClose} onPress={() => setShowSubtitle(false)}>
+            <Ionicons name="close-circle" size={18} color="rgba(255,255,255,0.6)" />
+          </TouchableOpacity>
+        </View>
+      ) : !showSubtitle ? (
+        <TouchableOpacity style={styles.subtitleToggle} onPress={() => setShowSubtitle(true)}>
+          <Ionicons name="chatbox-ellipses-outline" size={16} color="#1B365D" />
+          <Text style={styles.subtitleToggleText}>{t('إظهار النص', 'Show Script')}</Text>
+        </TouchableOpacity>
+      ) : null}
+
       <ScrollView style={{ flex: 1, marginHorizontal: 16 }} showsVerticalScrollIndicator={false}>
         <View style={styles.slide}>
           <View style={[styles.slideTopBar, { flexDirection: rowDir }]}>
@@ -285,6 +316,13 @@ const styles = StyleSheet.create({
   dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#D0D0CC' },
   dotActive: { backgroundColor: '#1B365D', width: 24 },
   dotDone: { backgroundColor: '#D4A843' },
+  // Subtitle bar
+  subtitleBar: { marginHorizontal: 16, marginBottom: 4, backgroundColor: 'rgba(27,54,93,0.9)', borderRadius: 8, padding: 10, maxHeight: 80, flexDirection: 'row' },
+  subtitleScroll: { flex: 1 },
+  subtitleText: { fontSize: 13, color: '#fff', lineHeight: 20 },
+  subtitleClose: { paddingLeft: 8, justifyContent: 'flex-start' },
+  subtitleToggle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, marginHorizontal: 16, marginBottom: 4, paddingVertical: 4 },
+  subtitleToggleText: { fontSize: 11, color: '#1B365D', fontWeight: '600' },
   slide: { backgroundColor: '#fff', borderRadius: 4, overflow: 'hidden', borderWidth: 1, borderColor: '#E0E0DC' },
   slideBody: { paddingBottom: 8 },
   slideTopBar: { backgroundColor: '#1B365D', paddingHorizontal: 16, paddingVertical: 10, justifyContent: 'space-between', alignItems: 'center' },
