@@ -73,16 +73,6 @@ export default function LessonViewer() {
     if (!isMountedRef.current) return;
 
     setAudioLoading(true);
-    setSubtitleText('');
-    // Fetch subtitle text
-    try {
-      const subRes = await fetch(`${BACKEND_URL}/api/audio/subtitle/${id}/${slideIndex}?lang=${lang}`);
-      if (subRes.ok) {
-        const subData = await subRes.json();
-        if (isMountedRef.current && subData.text) setSubtitleText(subData.text);
-      }
-    } catch (e) { /* subtitle fetch failed, not critical */ }
-
     try {
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: false,
