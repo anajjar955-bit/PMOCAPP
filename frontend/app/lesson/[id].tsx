@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Dimensions, FlatList } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, ScrollView } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useAuth } from '../_layout';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -7,7 +7,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
 
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
-const { width } = Dimensions.get('window');
 
 export default function LessonViewer() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -17,7 +16,6 @@ export default function LessonViewer() {
   const [loading, setLoading] = useState(true);
   const [audioPlaying, setAudioPlaying] = useState(false);
   const [audioLoading, setAudioLoading] = useState(false);
-  const flatListRef = useRef<FlatList>(null);
   const soundRef = useRef<Audio.Sound | null>(null);
   const currentSlideRef = useRef(0);
   const [currentSlide, setCurrentSlideState] = useState(0);
@@ -112,7 +110,6 @@ export default function LessonViewer() {
   const goToSlideAndPlay = (index: number) => {
     cleanupAudio();
     setCurrentSlide(index);
-    flatListRef.current?.scrollToIndex({ index, animated: true });
     // Play audio after small delay to let UI settle
     setTimeout(() => { if (isMountedRef.current) startAudio(index); }, 600);
   };
@@ -162,32 +159,13 @@ export default function LessonViewer() {
 
   const slides = lesson.slides || [];
 
-  const renderSlide = ({ item, index }: { item: any; index: number }) => (
-    <View style={[styles.slide, { width: width - 32 }]}>
-      <View style={styles.slideHeader}>
-        <Text style={styles.slideNumber}>شريحة {index + 1} من {slides.length}</Text>
-      </View>
-      <Text style={styles.slideTitle}>{item.title}</Text>
-      <Text style={styles.slideContent}>{item.content}</Text>
-      {item.key_points?.length > 0 && (
-        <View style={styles.keyPointsContainer}>
-          <Text style={styles.keyPointsTitle}>النقاط الرئيسية:</Text>
-          {item.key_points.map((point: string, i: number) => (
-            <View key={i} style={styles.keyPointRow}>
-              <View style={styles.bullet}><Text style={styles.bulletText}>{i + 1}</Text></View>
-              <Text style={styles.keyPointText}>{point}</Text>
-            </View>
-          ))}
-        </View>
-      )}
-    </View>
-  );
+  const currentItem = slides[currentSlide];
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.topBar}>
         <TouchableOpacity testID="lesson-back-btn" onPress={handleBack} style={styles.topBtn}>
-          <Ionicons name="arrow-forward" size={22} color="#0F172A" />
+          <Ionicons name="arrow-forward" size={22} color="#1B365D" />
         </TouchableOpacity>
         <View style={styles.topCenter}>
           <Text style={styles.topTitle} numberOfLines={1}>{lesson.title}</Text>
@@ -204,7 +182,7 @@ export default function LessonViewer() {
         </TouchableOpacity>
         <View style={styles.audioInfo}>
           <Text style={styles.audioLabel}>
-            {audioLoading ? 'جاري تحميل الصوت...' : audioPlaying ? '🔊 الشرح الصوتي شغال' : '🎧 الصوت هيشتغل تلقائياً'}
+            {audioLoading ? 'جاري التحميل...' : audioPlaying ? 'الصوت شغال' : 'اضغط لتشغيل الصوت أو سيعمل تلقائياً'}
           </Text>
           <Text style={styles.audioSub}>صوت عمر - لهجة مصرية</Text>
         </View>
@@ -218,19 +196,37 @@ export default function LessonViewer() {
         ))}
       </View>
 
-      <FlatList
-        ref={flatListRef}
-        data={slides}
-        renderItem={renderSlide}
-        horizontal pagingEnabled
-        showsHorizontalScrollIndicator={false}
-        keyExtractor={(_, i) => i.toString()}
-        scrollEnabled={false}
-        contentContainerStyle={{ paddingHorizontal: 16 }}
-        snapToInterval={width - 32}
-        decelerationRate="fast"
-        getItemLayout={(_, index) => ({ length: width - 32, offset: (width - 32) * index, index })}
-      />
+      {/* Direct slide rendering instead of FlatList */}
+      <ScrollView style={{ flex: 1, marginHorizontal: 16 }} showsVerticalScrollIndicator={false}>
+        <View style={styles.slide}>
+          <View style={styles.slideTopBar}>
+            <Text style={styles.slideTopText}>PM HOUSE ACADEMY</Text>
+            <Text style={styles.slideTopNum}>{currentSlide + 1}/{slides.length}</Text>
+          </View>
+          <View style={styles.goldAccent} />
+          <View style={styles.slideBody}>
+            <Text style={styles.slideTitle}>{currentItem?.title}</Text>
+            <Text style={styles.slideContent}>{currentItem?.content}</Text>
+            {currentItem?.key_points?.length > 0 && (
+              <View style={styles.keyPointsContainer}>
+                <View style={styles.keyInsightHeader}>
+                  <Ionicons name="bulb" size={16} color="#D4A843" />
+                  <Text style={styles.keyInsightLabel}>KEY POINTS</Text>
+                </View>
+                {currentItem.key_points.map((point: string, i: number) => (
+                  <View key={i} style={styles.keyPointRow}>
+                    <View style={styles.bullet} />
+                    <Text style={styles.keyPointText}>{point}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+          <View style={styles.slideFooter}>
+            <Text style={styles.slideFooterText}>PMHouse.org | PMI-PMO CP Prep</Text>
+          </View>
+        </View>
+      </ScrollView>
 
       <View style={styles.navButtons}>
         <TouchableOpacity testID="prev-slide-btn"
@@ -249,40 +245,45 @@ export default function LessonViewer() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F8FAFC' },
-  loader: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F8FAFC', gap: 16 },
-  backFallback: { backgroundColor: '#1D4ED8', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12 },
+  container: { flex: 1, backgroundColor: '#F5F5F0' },
+  loader: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F5F5F0', gap: 16 },
+  backFallback: { backgroundColor: '#1B365D', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 8 },
   backFallbackText: { color: '#fff', fontSize: 16, fontWeight: '700' },
   topBar: { flexDirection: 'row-reverse', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12 },
-  topBtn: { padding: 8, backgroundColor: '#F1F5F9', borderRadius: 10 },
+  topBtn: { padding: 8, backgroundColor: '#E8E8E4', borderRadius: 10 },
   topCenter: { flex: 1, alignItems: 'center' },
-  topTitle: { fontSize: 16, fontWeight: '700', color: '#0F172A' },
-  topSub: { fontSize: 12, color: '#64748B', marginTop: 2 },
-  audioBar: { flexDirection: 'row-reverse', alignItems: 'center', gap: 12, marginHorizontal: 16, padding: 12, borderRadius: 14, backgroundColor: '#0F172A' },
-  audioBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#1D4ED8', alignItems: 'center', justifyContent: 'center' },
-  audioBtnActive: { backgroundColor: '#EA580C' },
+  topTitle: { fontSize: 16, fontWeight: '700', color: '#1B365D' },
+  topSub: { fontSize: 12, color: '#666', marginTop: 2 },
+  audioBar: { flexDirection: 'row-reverse', alignItems: 'center', gap: 12, marginHorizontal: 16, padding: 12, borderRadius: 10, backgroundColor: '#1B365D' },
+  audioBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#D4A843', alignItems: 'center', justifyContent: 'center' },
+  audioBtnActive: { backgroundColor: '#EA6A0B' },
   audioInfo: { flex: 1 },
-  audioLabel: { fontSize: 14, fontWeight: '600', color: '#fff', textAlign: 'right' },
-  audioSub: { fontSize: 11, color: '#94A3B8', textAlign: 'right', marginTop: 2 },
+  audioLabel: { fontSize: 13, fontWeight: '600', color: '#fff', textAlign: 'right' },
+  audioSub: { fontSize: 11, color: 'rgba(255,255,255,0.6)', textAlign: 'right', marginTop: 2 },
   dots: { flexDirection: 'row-reverse', justifyContent: 'center', gap: 8, paddingVertical: 8 },
-  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#E2E8F0' },
-  dotActive: { backgroundColor: '#1D4ED8', width: 24 },
-  dotDone: { backgroundColor: '#16A34A' },
-  slide: { backgroundColor: '#fff', borderRadius: 16, padding: 24, borderWidth: 1, borderColor: '#E2E8F0', flex: 1 },
-  slideHeader: { marginBottom: 16 },
-  slideNumber: { fontSize: 13, color: '#94A3B8', textAlign: 'right' },
-  slideTitle: { fontSize: 22, fontWeight: '800', color: '#0F172A', textAlign: 'right', marginBottom: 16, lineHeight: 32 },
-  slideContent: { fontSize: 16, color: '#475569', textAlign: 'right', lineHeight: 26, marginBottom: 20 },
-  keyPointsContainer: { backgroundColor: '#F8FAFC', padding: 16, borderRadius: 12, borderWidth: 1, borderColor: '#E2E8F0' },
-  keyPointsTitle: { fontSize: 15, fontWeight: '700', color: '#0F172A', textAlign: 'right', marginBottom: 12 },
-  keyPointRow: { flexDirection: 'row-reverse', alignItems: 'flex-start', gap: 10, marginBottom: 10 },
-  bullet: { width: 24, height: 24, borderRadius: 12, backgroundColor: '#1D4ED8', alignItems: 'center', justifyContent: 'center', marginTop: 2 },
-  bulletText: { color: '#fff', fontSize: 12, fontWeight: '700' },
-  keyPointText: { flex: 1, fontSize: 14, color: '#374151', textAlign: 'right', lineHeight: 22 },
+  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#D0D0CC' },
+  dotActive: { backgroundColor: '#1B365D', width: 24 },
+  dotDone: { backgroundColor: '#D4A843' },
+  slide: { backgroundColor: '#fff', borderRadius: 4, overflow: 'hidden', flex: 1, borderWidth: 1, borderColor: '#E0E0DC' },
+  slideBody: { flex: 1, paddingBottom: 8 },
+  slideTopBar: { backgroundColor: '#1B365D', paddingHorizontal: 16, paddingVertical: 10, flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center' },
+  slideTopText: { fontSize: 11, fontWeight: '700', color: '#fff', letterSpacing: 2 },
+  slideTopNum: { fontSize: 12, color: 'rgba(255,255,255,0.7)', fontWeight: '600' },
+  goldAccent: { height: 3, backgroundColor: '#D4A843' },
+  slideTitle: { fontSize: 20, fontWeight: '700', color: '#1B365D', textAlign: 'right', paddingHorizontal: 20, paddingTop: 20, marginBottom: 12, lineHeight: 30 },
+  slideContent: { fontSize: 15, color: '#333', textAlign: 'right', lineHeight: 24, paddingHorizontal: 20, marginBottom: 16 },
+  keyPointsContainer: { marginHorizontal: 16, marginBottom: 16, backgroundColor: '#F8F8F5', padding: 16, borderRadius: 4, borderLeftWidth: 3, borderLeftColor: '#D4A843' },
+  keyInsightHeader: { flexDirection: 'row-reverse', alignItems: 'center', gap: 6, marginBottom: 10 },
+  keyInsightLabel: { fontSize: 11, fontWeight: '800', color: '#1B365D', letterSpacing: 2 },
+  keyPointRow: { flexDirection: 'row-reverse', alignItems: 'flex-start', gap: 10, marginBottom: 8 },
+  bullet: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#1B365D', marginTop: 6 },
+  keyPointText: { flex: 1, fontSize: 14, color: '#333', textAlign: 'right', lineHeight: 22 },
+  slideFooter: { borderTopWidth: 1, borderTopColor: '#E0E0DC', paddingVertical: 8, paddingHorizontal: 16, marginTop: 'auto' },
+  slideFooterText: { fontSize: 10, color: '#999', textAlign: 'center', letterSpacing: 1 },
   navButtons: { flexDirection: 'row-reverse', paddingHorizontal: 16, paddingVertical: 12, gap: 12 },
-  navBtn: { flex: 1, flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#1D4ED8', paddingVertical: 14, borderRadius: 12 },
+  navBtn: { flex: 1, flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#1B365D', paddingVertical: 14, borderRadius: 8 },
   navBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
-  navBtnSecondary: { backgroundColor: '#EFF6FF', borderWidth: 1, borderColor: '#DBEAFE' },
-  navBtnSecondaryText: { color: '#1D4ED8', fontSize: 16, fontWeight: '700' },
-  navBtnDisabled: { opacity: 0.5 },
+  navBtnSecondary: { backgroundColor: '#F0F0EC', borderWidth: 1, borderColor: '#D0D0CC' },
+  navBtnSecondaryText: { color: '#1B365D', fontSize: 16, fontWeight: '700' },
+  navBtnDisabled: { opacity: 0.4 },
 });
