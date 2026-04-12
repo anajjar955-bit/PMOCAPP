@@ -537,7 +537,7 @@ async def get_slide_subtitle(lesson_id: str, slide_index: int, lang: str = "ar")
 @api_router.get("/audio/slide/{lesson_id}/{slide_index}/en")
 async def get_slide_audio_en(lesson_id: str, slide_index: int, request: Request):
     """Generate English TTS audio with edge-tts (free, professional American voice)"""
-    cache_key = f"{lesson_id}_{slide_index}_en"
+    cache_key = f"{lesson_id}_{slide_index}_env2"
     cached = await db.audio_cache.find_one({"cache_key": cache_key}, {"_id": 0})
     if cached and cached.get("audio_base64"):
         audio_bytes = base64.b64decode(cached["audio_base64"])
@@ -552,18 +552,51 @@ async def get_slide_audio_en(lesson_id: str, slide_index: int, request: Request)
         raise HTTPException(status_code=404, detail="Slide not found")
 
     slide = slides[slide_index]
-    # Build English narration text from slide content
+    # Build slide content for GPT prompt
     title = slide.get('title_en', slide.get('title', ''))
     content = slide.get('content_en', slide.get('content', ''))
     key_points = slide.get('key_points_en', slide.get('key_points', []))
-    narration = f"{title}. {content}"
+    slide_content = f"Title: {title}\nContent: {content}"
     if key_points:
-        narration += " Key points: " + ". ".join(key_points) + "."
+        slide_content += "\nKey Points: " + ", ".join(key_points)
 
+    # Step 1: Generate professional American lecturer narration using GPT
+    try:
+        from emergentintegrations.llm.openai import LlmChat, UserMessage
+        import hashlib
+        sid = f"en_{hashlib.md5(cache_key.encode()).hexdigest()[:8]}"
+        chat = LlmChat(
+            api_key=os.getenv("EMERGENT_LLM_KEY"),
+            session_id=sid,
+            system_message="You are a professional American project management instructor delivering an engaging PMI-PMO CP exam prep lecture."
+        )
+        chat = chat.with_model("openai", "gpt-4o-mini")
+        prompt = f"""Write a spoken narration script for this slide content as a professional American PMI lecturer:
+
+{slide_content}
+
+Rules:
+1. Speak naturally like a confident, engaging American professor
+2. Use conversational yet professional tone
+3. Add brief real-world examples or analogies when helpful
+4. Start directly with the topic - no greetings
+5. Use phrases like: "Here's the key insight", "Think of it this way", "What this really means is", "In practice"
+6. Keep it 60 to 80 words - concise and impactful
+7. Write as continuous speech - no bullet points or headings
+8. Use simple, clear American English"""
+
+        narration = await chat.send_message(UserMessage(text=prompt))
+        narration = narration.strip()[:4096]
+        logger.info(f"EN Narration for {cache_key}: {narration[:80]}...")
+    except Exception as e:
+        logger.error(f"GPT EN narration failed: {e}")
+        narration = f"{title}. {content}"
+        if key_points:
+            narration += " Key points: " + ". ".join(key_points) + "."
+
+    # Step 2: Generate audio with edge-tts
     try:
         import edge_tts
-        import asyncio
-        import io
         communicate = edge_tts.Communicate(narration, "en-US-GuyNeural", rate="-5%")
         audio_data = b""
         async for chunk in communicate.stream():

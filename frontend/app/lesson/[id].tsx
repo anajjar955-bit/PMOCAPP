@@ -127,7 +127,7 @@ export default function LessonViewer() {
       });
       // Use English endpoint when lang is 'en'
       const audioUrl = lang === 'en'
-        ? `${BACKEND_URL}/api/audio/slide/${id}/${slideIndex}/en`
+        ? `${BACKEND_URL}/api/audio/slide/${id}/${slideIndex}/en?v=2`
         : `${BACKEND_URL}/api/audio/slide/${id}/${slideIndex}`;
       const { sound } = await Audio.Sound.createAsync(
         { uri: audioUrl },
